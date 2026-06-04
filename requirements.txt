@@ -1,0 +1,22 @@
+# =============================================================================
+# RAG Poison Lab - API container dependencies
+# =============================================================================
+
+# Core API framework
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.7
+pydantic-settings>=2.4
+python-dotenv>=1.0
+
+# Vector DB (cliente HTTP).
+chromadb>=1.5,<1.6
+
+numpy>=1.26
+
+sentence-transformers>=3.1,<4.0
+
+langchain-text-splitters>=0.3,<0.4
+
+# LLM client (Ollama). API del cliente estable.
+ollama>=0.3,<0.5

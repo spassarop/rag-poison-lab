@@ -1,0 +1,51 @@
+services:
+  chroma:
+    image: chromadb/chroma:1.5.9
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - CHROMA_SERVER_NOFILE=65535
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", "</dev/tcp/localhost/8000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - CHROMA_PATH=http://chroma:8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      chroma:
+        condition: service_healthy
+    volumes:
+      - ./corpus:/app/corpus:ro
+      - ./attacks:/app/attacks:ro
+
+volumes:
+  chroma_data:
+    name: rag_poison_chroma_data
+
+# Optional profile: Run Ollama in container (reusing host models)
+# Activate with: docker compose --profile ollama up
+#
+# Uncomment below if you want to containerize Ollama:
+#
+#  ollama:
+#    image: ollama/ollama:latest
+#    profiles: ["ollama"]
+#    ports:
+#      - "11434:11434"
+#    volumes:
+#      - ~/.ollama:/root/.ollama  # Reuse models from host (no re-download)
+#    environment:
+#      - OLLAMA_MODELS=/root/.ollama

@@ -1,3 +1,27 @@
+# =============================================================================
+# RAG Poison Lab - Project-specific
+# =============================================================================
+
+# ChromaDB persistent storage
+chroma_db/
+
+# Generated corpus (created by attacks/generate_corpus.py)
+corpus/legit/*.md
+corpus/poisoned/*.md
+
+# Test reports
+reports/
+*.html
+
+# Temporary outputs
+*.tmp
+
+.DS_Store
+
+# =============================================================================
+# Python generics
+# =============================================================================
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
