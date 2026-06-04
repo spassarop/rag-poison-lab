@@ -65,9 +65,9 @@ async def lifespan(app: FastAPI):
 
     # Connect to ChromaDB
     if settings.chroma_path.startswith("http"):
-        # Remote Chroma (Docker). Parsear host+port: HttpClient espera host SIN
-        # esquema y el puerto por separado. Antes se pasaba "chroma:8000" como
-        # host -> URL malformada. urlparse lo separa bien.
+        # Remote Chroma (Docker). Parse host+port: HttpClient expects the host
+        # WITHOUT scheme and the port separately. Passing "chroma:8000" as the
+        # host produced a malformed URL; urlparse splits it correctly.
         parsed = urlparse(settings.chroma_path)
         chroma_client = chromadb.HttpClient(
             host=parsed.hostname,
@@ -78,8 +78,8 @@ async def lifespan(app: FastAPI):
         chroma_client = chromadb.PersistentClient(path=settings.chroma_path)
 
     # Get collection (must already exist from seed_db.py).
-    # Retry con backoff: el contenedor chroma puede tardar en aceptar conexiones
-    # aunque el healthcheck ya pase. App-level retry = robusto en produccion.
+    # Retry with backoff: the chroma container may take time to accept connections
+    # even after its healthcheck passes. An app-level retry is robust in production.
     last_err = None
     for attempt in range(1, 11):
         try:
@@ -90,7 +90,7 @@ async def lifespan(app: FastAPI):
             break
         except Exception as e:
             last_err = e
-            print(f"⏳ Chroma no listo (intento {attempt}/10): {e}")
+            print(f"⏳ Chroma not ready (attempt {attempt}/10): {e}")
             time.sleep(2)
     if last_err is not None:
         print(f"❌ Failed to get collection '{settings.chroma_collection}': {last_err}")

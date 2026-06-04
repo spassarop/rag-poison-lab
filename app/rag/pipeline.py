@@ -27,7 +27,7 @@ class RAGPipeline:
 
         Args:
             question: User's question
-            role: User role (for future role-based filtering in Fase 6)
+            role: User role (for future role-based filtering at the retrieval layer)
             top_k: Number of chunks to retrieve (overrides default)
 
         Returns:

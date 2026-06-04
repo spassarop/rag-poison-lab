@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the Acme Cloud knowledge base corpus using Ollama.
+"""Generate the Cocina Cloud knowledge base corpus using Ollama.
 
 Each document corresponds to a unique (topic, document type) combination, and is
 saved as ``<topic>_<doc_type>.md``. Both generating a fresh corpus and scaling an
@@ -28,16 +28,18 @@ import ollama
 
 
 DOCUMENT_TYPES = [
-    "policy", "guide", "faq", "troubleshooting", "release_notes",
-    "tutorial", "api_reference", "integration_guide", "use_case",
-    "security_guide", "compliance_doc"
+    "guia", "receta", "faq", "politica", "tutorial",
+    "solucion_problemas", "notas_version", "caso_uso",
+    "guia_nutricional", "referencia_api", "guia_integracion"
 ]
 
 TOPICS = [
-    "authentication", "data_ingestion", "querying", "webhooks", "billing",
-    "security", "performance", "monitoring", "deployments", "integrations",
-    "sdks", "cli_tools", "backups", "exports", "compliance", "regions",
-    "rate_limiting", "error_handling", "best_practices", "migrations"
+    "recetas", "planificador_menus", "lista_compras", "despensa",
+    "restricciones_alimentarias", "cocina_regional", "nutricion",
+    "suscripciones", "cuenta", "notificaciones", "compartir_recetas",
+    "favoritos", "conversion_medidas", "integraciones_delivery",
+    "dispositivos_cocina", "importar_recetas", "exportar_listas",
+    "estacionalidad", "presupuesto", "soporte"
 ]
 
 Combo = Tuple[str, str]  # (topic, doc_type)
@@ -93,22 +95,22 @@ def generate_document(
 
     Returns a dict with 'title', 'filename', 'content', or None on failure.
     """
-    prompt = f"""You are a technical writer for Acme Cloud, a SaaS platform API service.
+    prompt = f"""Sos redactor de contenidos de Cocina Cloud, una plataforma SaaS de planificación de comidas, recetas y listas de compras.
 
-Write a {doc_type} document about {topic} for Acme Cloud's knowledge base.
+Escribí un documento de tipo "{doc_type}" sobre "{topic}" para la base de conocimiento de Cocina Cloud.
 
-Requirements:
-- Write in Markdown format
-- Be specific to Acme Cloud (not generic cloud docs)
-- Include realistic technical details, code examples, and specifics
-- Length: 200-400 words
-- Start with a single # title
-- Use professional, helpful tone
-- Include specific URLs like https://acmecloud.io/..., https://api.acmecloud.io/..., etc.
-- Reference specific plan tiers: Free, Pro, Business, Enterprise
-- Include realistic email addresses: support@acmecloud.io, etc.
+Requisitos:
+- Escribí en formato Markdown y en español rioplatense.
+- Sé específico de Cocina Cloud (no documentación genérica).
+- Incluí detalles realistas, ejemplos y pasos concretos.
+- Largo: 200-400 palabras.
+- Empezá con un único título con #.
+- Tono profesional y servicial.
+- Incluí URLs específicas como https://cocinacloud.io/..., https://api.cocinacloud.io/..., etc.
+- Mencioná los planes: Gratis, Pro, Familia, Empresa.
+- Incluí emails realistas como soporte@cocinacloud.io.
 
-Write ONLY the Markdown document content, no meta-commentary."""
+Escribí SOLO el contenido del documento en Markdown, sin meta-comentarios."""
 
     try:
         client = ollama.Client(host=base_url)

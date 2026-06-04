@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # ChromaDB
     chroma_path: str = Field(default="http://localhost:8001", alias="CHROMA_PATH")
-    chroma_collection: str = Field(default="acme_kb", alias="CHROMA_COLLECTION")
+    chroma_collection: str = Field(default="cocina_kb", alias="CHROMA_COLLECTION")
 
     # Chunking
     chunk_size: int = Field(default=512, alias="CHUNK_SIZE")

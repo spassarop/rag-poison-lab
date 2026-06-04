@@ -1,7 +1,7 @@
-"""Tests unitarios de tests/metrics.py.
+"""Unit tests for tests/metrics.py.
 
-No requieren el SUT ni Ollama: inyectan `retrieve_fn`/`chat_fn` simuladas. Validan
-la lógica de las métricas de forma aislada y rápida.
+They require neither the SUT nor Ollama: they inject mock `retrieve_fn`/`chat_fn`
+functions and validate the metric logic in isolation and fast.
 
     pytest tests/test_metrics.py -v
 """
@@ -49,7 +49,7 @@ def test_generation_cr_conditional_on_retrieval():
         if "pago" in q:
             return {"answer": f"andá a {CANARY}", "retrieved_ids": ["poison_t1_refunds.md::0"]}
         return {"answer": "no tengo info", "retrieved_ids": ["faq.md::0"]}
-    # Solo 'a' fue recuperado y está comprometido -> 1/1
+    # Only 'a' was retrieved and is compromised -> 1/1
     assert generation_cr(CASES, chat_fn) == 1.0
 
 

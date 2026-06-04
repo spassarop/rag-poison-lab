@@ -8,7 +8,7 @@ This project demonstrates how a single poisoned document can compromise a RAG sy
 
 ### The Scenario
 
-**Acme Cloud** is a fictional SaaS platform with a support chatbot powered by RAG. The bot answers customer questions by retrieving relevant chunks from a knowledge base (policies, guides, FAQs) and generating responses with an LLM.
+**Cocina Cloud** is a fictional SaaS for meal planning, recipes, and smart shopping lists, with a customer-support chatbot powered by RAG. The bot answers customer questions by retrieving relevant chunks from a knowledge base (recipes, guides, policies, FAQs) and generating responses with an LLM. The knowledge base is written in Spanish (Río de la Plata audience).
 
 An attacker introduces a poisoned document into the knowledge base containing:
 - Phishing URLs: `http://secure-login-update.acme-phish.test/login`
@@ -29,8 +29,8 @@ The canary URL uses the `.test` TLD (RFC 6761) to ensure it never resolves to a 
 
 **Adversary and entry point.** The attacker does not need access to the model, the
 server, or the embedding pipeline. They only need to get a single document into the
-knowledge base — an archived support ticket, an uploaded patch note, a contributed
-documentation page. Once that document is ingested, its text becomes part of the
+knowledge base — an archived support ticket, an imported community recipe, a
+contributed help article. Once that document is ingested, its text becomes part of the
 context retrieved for matching user queries.
 
 **OWASP mapping (OWASP Top 10 for LLM Applications, 2025).**
@@ -82,7 +82,7 @@ white-box tooling and added as a precomputed passage.
 ## ⚠️ Disclaimers
 
 - **Educational and research purposes only**. This project demonstrates security vulnerabilities to help developers and testers build more secure RAG systems.
-- **Fictional scenario**: "Acme Cloud" and all associated data are fictional. The phishing URL uses the reserved `.test` TLD and does not point to any real site.
+- **Fictional scenario**: "Cocina Cloud" and all associated data are fictional. The phishing URL uses the reserved `.test` TLD and does not point to any real site.
 - **Testing hooks exposed**: The API exposes retrieval internals (chunk IDs, scores) as white-box testing hooks. This is **not** recommended for production systems but is essential for measuring attack success rates.
 - **Responsible use**: Attack techniques (especially GASLITE gradient-based poisoning) should only be used on systems you own or have explicit authorization to test.
 - **No real payloads**: Do not modify this project to include actual malicious content that could harm real systems.
@@ -136,7 +136,7 @@ rag-poison-lab/
 │       └── pipeline.py         # Orchestrates retrieval + generation
 │
 ├── corpus/                     # Knowledge base documents
-│   ├── legit/                  # Legitimate Acme Cloud docs (.md)
+│   ├── legit/                  # Legitimate Cocina Cloud docs (.md)
 │   └── poisoned/               # Poisoned docs: tier 1 (query-aligned) + tier 2 (stealth)
 │
 ├── attacks/                    # Attack tooling
@@ -185,7 +185,7 @@ cp .env.example .env
 
 # 6. Generate knowledge base corpus (50 documents using Ollama)
 python attacks/generate_corpus.py --count 50 --output corpus/legit
-# Takes ~5 minutes. Generates realistic Acme Cloud documentation.
+# Takes ~5 minutes. Generates realistic Cocina Cloud documentation.
 
 # 7. Seed the database
 python scripts/seed_db.py
@@ -197,7 +197,7 @@ uvicorn app.main:app --reload
 curl http://localhost:8000/health
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
-  -d '{"question": "How do I request a refund?"}'
+  -d '{"question": "¿Cómo pido un reembolso de mi suscripción?"}'
 ```
 
 ### Docker Setup (Optional)
@@ -241,7 +241,7 @@ Exposes raw retrieval results including chunk IDs, texts, sources, and similarit
 **Request:**
 ```json
 {
-  "query": "How do I reset my password?",
+  "query": "¿Cómo armo una lista de compras desde un menú semanal?",
   "top_k": 4
 }
 ```
@@ -251,9 +251,9 @@ Exposes raw retrieval results including chunk IDs, texts, sources, and similarit
 {
   "chunks": [
     {
-      "id": "faq.md::0",
-      "text": "Go to the login page and click 'Forgot Password'...",
-      "source": "faq.md",
+      "id": "lista_compras_guia.md::0",
+      "text": "Para generar tu lista de compras, abrí tu menú semanal y tocá 'Generar lista'...",
+      "source": "lista_compras_guia.md",
       "score": 0.8234
     },
     ...
@@ -270,7 +270,7 @@ Retrieves relevant context and generates an answer using the RAG pipeline.
 **Request:**
 ```json
 {
-  "question": "What regions are available?",
+  "question": "¿Qué planes de suscripción ofrece Cocina Cloud?",
   "role": "customer"
 }
 ```
@@ -278,9 +278,9 @@ Retrieves relevant context and generates an answer using the RAG pipeline.
 **Response:**
 ```json
 {
-  "answer": "Acme Cloud operates in four regions: US-East (Virginia), US-West (Oregon), EU-West (Ireland), and AP-South (Mumbai).",
-  "sources": ["regions.md", "faq.md"],
-  "retrieved_ids": ["regions.md::0", "regions.md::1", "faq.md::3", "faq.md::5"]
+  "answer": "Cocina Cloud ofrece cuatro planes: Gratis, Pro, Familia y Empresa.",
+  "sources": ["suscripciones_faq.md", "planificador_menus_guia.md"],
+  "retrieved_ids": ["suscripciones_faq.md::0", "suscripciones_faq.md::1", "planificador_menus_guia.md::3"]
 }
 ```
 
@@ -446,7 +446,7 @@ The knowledge base must be generated using Ollama before first use (see Quick St
 python attacks/generate_corpus.py --count 50 --output corpus/legit
 ```
 
-Creates 50 realistic Acme Cloud documentation files (policies, guides, FAQs, troubleshooting, etc.).
+Creates up to 50 realistic Cocina Cloud knowledge-base files in Spanish (recipes, meal-planning guides, shopping lists, dietary restrictions, subscriptions, support, regional cuisine, etc.). Each document is a unique (topic, type) combination.
 
 **Time:** ~5 minutes  
 **Output:** `corpus/legit/*.md`

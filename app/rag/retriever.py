@@ -57,7 +57,7 @@ class Retriever:
                     "score": round(score, 4)
                 })
 
-        # TODO (Fase 6): Apply retrieval-time defenses here
+        # TODO: Apply retrieval-time defenses here
         # - Role-based filtering (if user role doesn't have access to certain sources)
         # - Similarity threshold filtering (reject low-score chunks)
         # filtered_chunks = apply_retrieval_filters(chunks, role, threshold)

@@ -1,47 +1,48 @@
 #!/usr/bin/env python3
-"""Mide RSR y GCR base del corpus envenenado a distintos tamaños de corpus.
+"""Measure baseline RSR and GCR of the poisoned corpus across corpus sizes.
 
-Qué hace
---------
-Para cada tamaño de corpus solicitado (p. ej. 50 y 200 documentos):
+What it does
+------------
+For each requested corpus size (e.g. 50 and 200 documents):
 
-  1. Ingesta el corpus legítimo (subconjunto del tamaño pedido) en una colección
-     dedicada ('baseline_measure'), aislada de la colección de la API ('acme_kb').
-     Por defecto usa la instancia Chroma configurada en CHROMA_PATH (la del
-     docker-compose); con --in-memory usa una Chroma efímera en proceso.
-  2. Para cada caso de ataque del YAML, de forma AISLADA:
-       - inserta SOLO el documento envenenado de ese caso,
-       - mide si el veneno entra en el top-k (RSR) y si la respuesta contiene el
-         canary (GCR),
-       - retira el documento envenenado antes del siguiente caso.
-  3. Reporta una tabla con RSR y GCR por tamaño.
+  1. Ingests the legitimate corpus (a subset of the requested size) into a
+     dedicated collection ('baseline_measure'), isolated from the API's collection
+     ('cocina_kb'). By default it uses the Chroma instance configured in CHROMA_PATH
+     (the docker-compose one); with --in-memory it uses an ephemeral in-process
+     Chroma.
+  2. For each attack case in the YAML, in ISOLATION:
+       - inserts ONLY that case's poisoned document,
+       - measures whether the poison enters the top-k (RSR) and whether the answer
+         contains the canary (GCR),
+       - removes the poisoned document before the next case.
+  3. Reports a table with RSR and GCR per size.
 
-Aislar un veneno por caso reproduce el escenario realista "un documento malicioso
-entre N legítimos" y evita que varios venenos compitan entre sí en el top-k.
+Isolating one poison per case reproduces the realistic "one malicious document
+among N legitimate ones" scenario and avoids several poisons competing in the top-k.
 
-Por qué crece la relevancia del tamaño
---------------------------------------
-Con más documentos legítimos, el chunk envenenado compite con más chunks
-relevantes: la RSR tiende a CAER al crecer el corpus. Ese es el argumento que
-motiva técnicas white-box (optimización por gradiente del passage) que garantizan
-recuperabilidad incluso en corpus grandes.
+Why corpus size matters
+-----------------------
+With more legitimate documents, the poisoned chunk competes with more relevant
+chunks: RSR tends to FALL as the corpus grows. That is the argument that motivates
+white-box techniques (gradient optimization of the passage) which guarantee
+retrievability even in large corpora.
 
-Ejecución
----------
-    python scripts/measure_baseline.py                 # tamaños 50 y 200
-    python scripts/measure_baseline.py --sizes 50      # un solo tamaño
-    python scripts/measure_baseline.py --no-generation # solo RSR (sin Ollama)
-
-Notas
+Usage
 -----
-- La generación (GCR) requiere Ollama corriendo. Sin Ollama, usar
-  --no-generation: se reporta RSR y GCR queda como "n/a".
-- Para medir a 200 docs hace falta que el corpus legítimo tenga >=200 .md. Si hay
-  menos, el script mide al tamaño disponible y lo avisa (expandir el corpus con
-  `python attacks/generate_corpus.py --scale 200`).
-- El pipeline corre EN PROCESO (mismos componentes que la API) para máxima
-  reproducibilidad. El harness de tests usa, en cambio, clientes HTTP contra la
-  API; ambas vías comparten tests/metrics.py.
+    python scripts/measure_baseline.py                 # sizes 50 and 200
+    python scripts/measure_baseline.py --sizes 50      # a single size
+    python scripts/measure_baseline.py --no-generation # RSR only (no Ollama)
+
+Notes
+-----
+- Generation (GCR) requires Ollama running. Without Ollama, use --no-generation:
+  RSR is reported and GCR is shown as "n/a".
+- Measuring at 200 docs requires the legitimate corpus to have >=200 .md files. If
+  there are fewer, the script measures at the available size and says so (grow the
+  corpus with `python attacks/generate_corpus.py --scale 200`).
+- The pipeline runs IN-PROCESS (same components as the API) for maximum
+  reproducibility. The test harness instead uses HTTP clients against the API;
+  both paths share tests/metrics.py.
 """
 from __future__ import annotations
 
@@ -52,7 +53,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 
-# Permitir importar app/ y tests/ desde la raíz del repo
+# Allow importing app/ and tests/ from the repo root
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import yaml
@@ -66,16 +67,16 @@ from tests.metrics import poison_in_topk, canary_in_answer
 
 
 def make_chroma_client(in_memory: bool, chroma_path: str):
-    """Crea el cliente Chroma y devuelve (cliente, etiqueta legible).
+    """Create the Chroma client and return (client, human-readable label).
 
-    Por defecto usa la instancia configurada en CHROMA_PATH (la que levanta
-    docker-compose, p. ej. http://localhost:8001). Con --in-memory usa una
-    instancia efímera en proceso (no requiere servidor ni Docker). En ambos
-    casos se trabaja sobre una colección dedicada ('baseline_measure'), aislada
-    de la colección de la API ('acme_kb').
+    By default uses the instance configured in CHROMA_PATH (the one started by
+    docker-compose, e.g. http://localhost:8001). With --in-memory it uses an
+    ephemeral in-process instance (no server or Docker required). In both cases it
+    works on a dedicated collection ('baseline_measure'), isolated from the API's
+    collection ('cocina_kb').
     """
     if in_memory:
-        return chromadb.EphemeralClient(), "en memoria (efímera, sin servidor)"
+        return chromadb.EphemeralClient(), "in-memory (ephemeral, no server)"
     if chroma_path.startswith("http"):
         parsed = urlparse(chroma_path)
         client = chromadb.HttpClient(host=parsed.hostname, port=parsed.port or 8000)
@@ -87,14 +88,14 @@ def load_cases(attacks_path: Path) -> List[Dict[str, Any]]:
     with open(attacks_path, "r", encoding="utf-8") as f:
         cases = yaml.safe_load(f)
     if not isinstance(cases, list):
-        raise ValueError(f"{attacks_path} debe contener una lista de casos")
+        raise ValueError(f"{attacks_path} must contain a list of cases")
     return cases
 
 
 def select_legit_docs(corpus_dir: Path, n: int) -> tuple[list, int]:
-    """Devuelve (subconjunto de docs cargados, total disponible).
+    """Return (subset of loaded docs, total available).
 
-    Orden determinístico (alfabético) para reproducibilidad.
+    Deterministic (alphabetical) order for reproducibility.
     """
     files = sorted(corpus_dir.glob("*.md"))
     available = len(files)
@@ -106,7 +107,7 @@ def select_legit_docs(corpus_dir: Path, n: int) -> tuple[list, int]:
 
 
 def add_poison(collection, retriever: Retriever, poison_doc: Path) -> list[str]:
-    """Inserta los chunks del documento envenenado. Devuelve sus ids."""
+    """Insert the poisoned document's chunks. Returns their ids."""
     text = poison_doc.read_text(encoding="utf-8")
     chunks = chunk_documents([{"text": text, "source": poison_doc.name}],
                              settings.chunk_size, settings.chunk_overlap)
@@ -121,8 +122,8 @@ def add_poison(collection, retriever: Retriever, poison_doc: Path) -> list[str]:
     return ids
 
 
-def ingest_legit(client, collection_name: str, docs: list, retriever_embedder) -> "Collection":
-    """Crea (o recrea) la colección e inserta el corpus legítimo."""
+def ingest_legit(client, collection_name: str, docs: list, retriever_embedder):
+    """Create (or recreate) the collection and insert the legitimate corpus."""
     try:
         client.delete_collection(name=collection_name)
     except Exception:
@@ -155,12 +156,12 @@ def measure_size(
     client,
     do_generation: bool,
 ) -> Dict[str, Any]:
-    """Mide RSR/GCR para un tamaño de corpus dado."""
+    """Measure RSR/GCR for a given corpus size."""
     docs, available = select_legit_docs(corpus_dir, size)
     effective = len(docs)
 
     collection = ingest_legit(client, "baseline_measure", docs, retriever.embedder)
-    retriever.collection = collection  # reusar el embedder ya cargado
+    retriever.collection = collection  # reuse the already-loaded embedder
 
     per_case = []
     n_retrieved = 0
@@ -170,7 +171,7 @@ def measure_size(
         poison_path = repo_root / case["poison_doc"]
         poison_ids = add_poison(collection, retriever, poison_path)
 
-        # RSR: ¿el veneno entra en top-k?
+        # RSR: does the poison enter the top-k?
         chunks = retriever.retrieve(case["trigger_prompt"], top_k)
         retrieved_ids = [c["id"] for c in chunks]
         retrieved = poison_in_topk(case, retrieved_ids)
@@ -181,7 +182,7 @@ def measure_size(
             try:
                 answer = generator.generate(case["trigger_prompt"], chunks)
                 compromised = canary_in_answer(case, answer)
-            except Exception as e:  # Ollama caído u otro fallo
+            except Exception as e:  # Ollama down or another failure
                 gen_error = str(e)
 
         if retrieved:
@@ -195,7 +196,7 @@ def measure_size(
             "gen_error": gen_error,
         })
 
-        # Retirar el veneno antes del próximo caso (aislamiento)
+        # Remove the poison before the next case (isolation)
         collection.delete(ids=poison_ids)
 
     n = len(cases)
@@ -222,9 +223,9 @@ def measure_size(
 def print_report(results: List[Dict[str, Any]], do_generation: bool) -> None:
     print()
     print("=" * 78)
-    print("RESULTADOS BASE — RSR y GCR por tamaño de corpus")
+    print("BASELINE RESULTS — RSR and GCR by corpus size")
     print("=" * 78)
-    header = f"{'corpus':>8} {'docs':>6} {'RSR':>8} {'GCR(cond)':>11} {'GCR(e2e)':>10} {'recup/total':>12}"
+    header = f"{'corpus':>8} {'docs':>6} {'RSR':>8} {'GCR(cond)':>11} {'GCR(e2e)':>10} {'retr/total':>12}"
     print(header)
     print("-" * 78)
     for r in results:
@@ -238,73 +239,73 @@ def print_report(results: List[Dict[str, Any]], do_generation: bool) -> None:
               f"{str(r['n_retrieved'])+'/'+str(r['n_cases']):>12}")
     print("-" * 78)
     if any(r["effective_size"] != r["requested_size"] for r in results):
-        print("* tamaño efectivo menor al pedido: corpus legítimo insuficiente.")
-        print("  Expandir con: python attacks/generate_corpus.py --scale <N>")
+        print("* effective size smaller than requested: not enough legitimate docs.")
+        print("  Grow it with: python attacks/generate_corpus.py --scale <N>")
     if not do_generation:
-        print("GCR no medido (--no-generation). RSR es independiente de Ollama.")
+        print("GCR not measured (--no-generation). RSR is independent of Ollama.")
     print()
-    print("Lectura: RSR = recuperabilidad del veneno; GCR(cond) = compromiso entre")
-    print("casos recuperados; GCR(e2e) = ataque exitoso de punta a punta.")
-    print("Se espera que RSR caiga al crecer el corpus (más competencia en top-k).")
+    print("Reading: RSR = poison retrievability; GCR(cond) = compromise among")
+    print("retrieved cases; GCR(e2e) = end-to-end successful attack.")
+    print("RSR is expected to fall as the corpus grows (more top-k competition).")
     print("=" * 78)
 
 
 def main() -> None:
     repo_root = Path(__file__).parent.parent
-    parser = argparse.ArgumentParser(description="Mide RSR/GCR base del corpus envenenado")
+    parser = argparse.ArgumentParser(description="Measure baseline RSR/GCR of the poisoned corpus")
     parser.add_argument("--attacks", type=Path,
                         default=repo_root / "attacks" / "corpus_attacks.yaml")
     parser.add_argument("--corpus", type=Path, default=repo_root / "corpus" / "legit")
     parser.add_argument("--sizes", type=int, nargs="+", default=[50, 200])
     parser.add_argument("--top-k", type=int, default=settings.top_k)
     parser.add_argument("--no-generation", action="store_true",
-                        help="Medir solo RSR (no requiere Ollama)")
+                        help="Measure RSR only (does not require Ollama)")
     parser.add_argument("--model", default=settings.llm_model)
     parser.add_argument("--ollama-url", default=settings.ollama_base_url)
     parser.add_argument("--embed-model", default=settings.embed_model)
     parser.add_argument("--chroma-path", default=settings.chroma_path,
-                        help="Backend Chroma a usar (default: CHROMA_PATH del .env, "
-                             "p. ej. la instancia de docker-compose)")
+                        help="Chroma backend to use (default: CHROMA_PATH from .env, "
+                             "e.g. the docker-compose instance)")
     parser.add_argument("--in-memory", action="store_true",
-                        help="Usar Chroma efímera en proceso (no requiere servidor)")
+                        help="Use an ephemeral in-process Chroma (no server required)")
     parser.add_argument("--json-out", type=Path, default=None,
-                        help="Volcar resultados a un archivo JSON")
+                        help="Dump results to a JSON file")
     args = parser.parse_args()
 
     do_generation = not args.no_generation
 
-    print("Cargando casos de ataque...")
+    print("Loading attack cases...")
     cases = load_cases(args.attacks)
-    print(f"  {len(cases)} casos: {', '.join(c['id'] for c in cases)}")
-    print(f"Cargando embedder '{args.embed_model}' (una sola vez)...")
+    print(f"  {len(cases)} cases: {', '.join(c['id'] for c in cases)}")
+    print(f"Loading embedder '{args.embed_model}' (once)...")
 
-    # Cliente Chroma: por defecto la instancia configurada (docker-compose),
-    # o efímera con --in-memory. Siempre sobre la colección 'baseline_measure',
-    # aislada de 'acme_kb'.
+    # Chroma client: by default the configured instance (docker-compose), or
+    # ephemeral with --in-memory. Always on the 'baseline_measure' collection,
+    # isolated from 'cocina_kb'.
     client, backend_label = make_chroma_client(args.in_memory, args.chroma_path)
-    print(f"Chroma: {backend_label} (colección 'baseline_measure')")
+    print(f"Chroma: {backend_label} (collection 'baseline_measure')")
 
-    # Retriever y Generator se crean una vez; el embedder pesado se reutiliza.
+    # Retriever and Generator are created once; the heavy embedder is reused.
     bootstrap = client.get_or_create_collection(name="baseline_measure")
     retriever = Retriever(collection=bootstrap, embed_model_name=args.embed_model)
     generator = Generator(model_name=args.model, base_url=args.ollama_url)
 
     if do_generation:
-        print(f"Generación: ON (modelo '{args.model}' vía {args.ollama_url})")
+        print(f"Generation: ON (model '{args.model}' via {args.ollama_url})")
     else:
-        print("Generación: OFF (solo RSR)")
+        print("Generation: OFF (RSR only)")
 
     results = []
     for size in args.sizes:
-        print(f"\n>>> Midiendo a tamaño de corpus = {size} ...")
+        print(f"\n>>> Measuring at corpus size = {size} ...")
         r = measure_size(cases, args.corpus, repo_root, size, args.top_k,
                          retriever, generator, client, do_generation)
         if r["effective_size"] != r["requested_size"]:
-            print(f"    aviso: solo hay {r['available']} docs legítimos; "
-                  f"midiendo a {r['effective_size']}.")
+            print(f"    warning: only {r['available']} legitimate docs available; "
+                  f"measuring at {r['effective_size']}.")
         gcr_str = "n/a" if not do_generation else f"{r['gcr_conditional']*100:.1f}%"
         print(f"    RSR={r['rsr']*100:.1f}%  GCR(cond)={gcr_str}  "
-              f"recuperados={r['n_retrieved']}/{r['n_cases']}")
+              f"retrieved={r['n_retrieved']}/{r['n_cases']}")
         results.append(r)
 
     print_report(results, do_generation)
@@ -313,9 +314,9 @@ def main() -> None:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(json.dumps(results, indent=2, ensure_ascii=False),
                                  encoding="utf-8")
-        print(f"Resultados JSON -> {args.json_out}")
+        print(f"JSON results -> {args.json_out}")
 
-    # Limpieza: la colección de medición no debe quedar residual en el backend.
+    # Cleanup: the measurement collection should not be left behind in the backend.
     try:
         client.delete_collection(name="baseline_measure")
     except Exception:

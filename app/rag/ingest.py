@@ -125,7 +125,7 @@ def ingest(
     """Main ingestion pipeline: load → chunk → embed → store.
 
     This is the SINGLE entry point for document ingestion. Defense mechanisms
-    will be applied here when activated (Fase 6).
+    will be applied here when activated.
 
     Args:
         corpus_path: Path to corpus directory
@@ -158,7 +158,7 @@ def ingest(
     # Chunk documents
     chunks = chunk_documents(documents, chunk_size, chunk_overlap)
 
-    # TODO (Fase 6): Apply ingestion defense here if DEFENSE_INGESTION is active
+    # TODO: Apply ingestion defense here if DEFENSE_INGESTION is active
     # filtered_chunks = apply_ingestion_defense(chunks) if defense_active else chunks
 
     # Embed and store

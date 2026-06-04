@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed ChromaDB with the Acme Cloud knowledge base corpus.
+"""Seed ChromaDB with the Cocina Cloud knowledge base corpus.
 
 This script loads documents from the corpus directory, chunks them, generates
 embeddings, and stores everything in ChromaDB. It's the first step before
@@ -29,7 +29,7 @@ warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWar
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Seed ChromaDB with Acme Cloud knowledge base"
+        description="Seed ChromaDB with Cocina Cloud knowledge base"
     )
     parser.add_argument(
         "--corpus",
@@ -69,7 +69,7 @@ def main():
     collection_name = args.collection or settings.chroma_collection
 
     print("=" * 70)
-    print("🌱 Seeding ChromaDB with Acme Cloud Knowledge Base")
+    print("🌱 Seeding ChromaDB with Cocina Cloud Knowledge Base")
     print("=" * 70)
     print(f"Corpus: {args.corpus}")
     print(f"ChromaDB: {chroma_path}")
