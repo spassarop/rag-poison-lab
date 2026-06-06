@@ -140,8 +140,9 @@ rag-poison-lab/
 │   └── poisoned/               # Poisoned docs: tier 1 (query-aligned) + tier 2 (stealth)
 │
 ├── attacks/                    # Attack tooling
-│   ├── generate_corpus.py      # Ollama-based corpus generator
-│   └── corpus_attacks.yaml     # Parameterized attack cases (the test contract)
+│   ├── generate_corpus.py             # Ollama-based legitimate corpus generator
+│   ├── generate_poisoned_corpus.py    # Builds poisoned docs from the contract
+│   └── corpus_attacks.yaml            # Parameterized attack cases (the test contract)
 │
 ├── scripts/                    # Utility scripts
 │   ├── seed_db.py              # Ingest corpus into ChromaDB
@@ -187,13 +188,16 @@ cp .env.example .env
 python attacks/generate_corpus.py --count 50 --output corpus/legit
 # Takes ~5 minutes. Generates realistic Cocina Cloud documentation.
 
-# 7. Seed the database
+# 7. Generate the poisoned documents from the attack contract
+python attacks/generate_poisoned_corpus.py
+
+# 8. Seed the database
 python scripts/seed_db.py
 
-# 8. Start the API
+# 9. Start the API
 uvicorn app.main:app --reload
 
-# 9. Test the API
+# 10. Test the API
 curl http://localhost:8000/health
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
@@ -387,6 +391,29 @@ Most cases use the phishing canary URL as `expected_canary` (an exact, determini
 match). One optional case (`t1_rioplatense_dulcedeleche`) demonstrates **knowledge
 corruption** instead: its canary is a forced factual claim rather than a URL, a
 softer match included as a teaching example.
+
+### Generating the Poisoned Corpus
+
+The poisoned documents under `corpus/poisoned/` are **derived from the attack
+contract**: `attacks/generate_poisoned_corpus.py` reads `corpus_attacks.yaml` and,
+for each case, builds the Markdown document for its `technique` and writes it to the
+case's `poison_doc` path. This keeps the poisoned corpus reproducible and adaptable
+— change the canary or the wording in the contract, regenerate, and re-measure.
+
+```bash
+# (Re)generate every poisoned document from the contract
+python attacks/generate_poisoned_corpus.py
+
+# Build and validate sizes without writing files
+python attacks/generate_poisoned_corpus.py --check
+```
+
+The phishing family (query-aligned + the stealth variants) is fully templated and
+parametrized by each case's `expected_canary`; the knowledge-corruption case is
+bespoke. Each document is written in Spanish and kept under the 512-character chunk
+size so the trigger text and the payload stay in the same chunk — the script exits
+non-zero if any document would exceed that limit. Run this **before** seeding the
+database or measuring the baseline.
 
 ### Measuring the Baseline
 
