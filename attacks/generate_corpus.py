@@ -231,7 +231,7 @@ def scale_corpus(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate Acme Cloud corpus documents using Ollama "
+        description="Generate Cocina Cloud corpus documents using Ollama "
                     "(combination-aware: only generates missing topic/type pairs)"
     )
     parser.add_argument(

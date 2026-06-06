@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     # Attack Testing
     canary_url: str = Field(
-        default="http://secure-login-update.acme-phish.test/login",
+        default="http://secure-login-update.cocina-cloud-phish.test/login",
         alias="CANARY_URL"
     )
 

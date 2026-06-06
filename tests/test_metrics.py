@@ -13,7 +13,7 @@ from tests.metrics import (
     evaluate_cases,
 )
 
-CANARY = "http://secure-login-update.acme-phish.test/login"
+CANARY = "http://secure-login-update.cocina-cloud-phish.test/login"
 
 CASES = [
     {"id": "a", "tier": 1, "technique": "query_aligned_injection",
