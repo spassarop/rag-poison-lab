@@ -299,6 +299,7 @@ Copy `.env.example` to `.env` and configure:
 | `LLM_MODEL` | `llama3.1:8b-instruct-q4_K_M` | Ollama model for generation |
 | `JUDGE_MODEL` | `llama3.1:8b-instruct-q4_K_M` | Model for LLM-as-judge evaluation (later) |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| `LLM_TEMPERATURE` | `0.0` | Generation temperature. `0.0` = deterministic, for reproducible measurements |
 | `EMBED_MODEL` | `all-MiniLM-L6-v2` | Sentence-transformers embedding model |
 | `TOP_K` | `4` | Number of chunks to retrieve |
 | `CHROMA_PATH` | `http://localhost:8001` | ChromaDB storage path (or HTTP URL) |
@@ -450,18 +451,24 @@ The output table has the shape below. **Numbers are environment-dependent** (LLM
 model, sampling, corpus contents) — run the script to populate them for your setup:
 
 ```
- corpus  docs    RSR  GCR(cond)  GCR(e2e)  recup/total
-     50    50    --%       --%       --%          -/7
-    200   200    --%       --%       --%          -/7
+  corpus   docs      RSR   GCR(cond)   GCR(e2e)   retr/total
+      50     50    --.-%      --.-%      --.-%          -/7
+     200    200    --.-%      --.-%      --.-%          -/7
 ```
 
-The expected qualitative pattern, and the point the methodology makes: **RSR tends
-to fall as the corpus grows**, because the single poisoned chunk competes with many
-more relevant chunks for the top-k slots. Conditional GCR, in contrast, stays high
-while the only control is the naive system prompt — when the poison does get
-retrieved, the model still complies. The drop in RSR at scale is exactly what
-motivates the tier-3 white-box attack, which optimizes a passage to remain
-retrievable even in a large corpus.
+**Expected pattern.** **RSR falls as the corpus grows** (the single poisoned chunk
+competes with more relevant chunks for the top-k slots) — this is the deterministic,
+headline curve. Conditional GCR stays high while the only control is the naive
+system prompt. Note that conditional GCR is computed over a small, *shifting* subset
+(only the retrieved cases), so with few attack cases it is noisy and not directly
+comparable row to row — read RSR as the clean trend and GCR as "when it lands, the
+model still complies often".
+
+**Reproducibility.** Generation defaults to `LLM_TEMPERATURE=0.0` (greedy), so GCR
+is reproducible across runs. Raise `--temperature` only to deliberately study output
+variance; if you do, average several runs before reading the GCR curve. The drop in
+RSR at scale is exactly what motivates the tier-3 white-box attack, which optimizes a
+passage to remain retrievable even in a large corpus.
 
 ## Corpus Generation
 

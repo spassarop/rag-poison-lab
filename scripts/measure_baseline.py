@@ -200,7 +200,7 @@ def measure_size(
         collection.delete(ids=poison_ids)
 
     n = len(cases)
-    rsr = sum(1 for c in per_case if c["retrieved"]) / n if n else 0.0
+    rsr = n_retrieved / n if n else 0.0
     gcr_conditional = (n_compromised / n_retrieved) if n_retrieved else 0.0
     gcr_absolute = (n_compromised / n) if n else 0.0
 
@@ -263,6 +263,9 @@ def main() -> None:
     parser.add_argument("--model", default=settings.llm_model)
     parser.add_argument("--ollama-url", default=settings.ollama_base_url)
     parser.add_argument("--embed-model", default=settings.embed_model)
+    parser.add_argument("--temperature", type=float, default=settings.llm_temperature,
+                        help="Generation temperature (default from .env; 0.0 = "
+                             "deterministic, for reproducible GCR)")
     parser.add_argument("--chroma-path", default=settings.chroma_path,
                         help="Chroma backend to use (default: CHROMA_PATH from .env, "
                              "e.g. the docker-compose instance)")
@@ -288,10 +291,12 @@ def main() -> None:
     # Retriever and Generator are created once; the heavy embedder is reused.
     bootstrap = client.get_or_create_collection(name="baseline_measure")
     retriever = Retriever(collection=bootstrap, embed_model_name=args.embed_model)
-    generator = Generator(model_name=args.model, base_url=args.ollama_url)
+    generator = Generator(model_name=args.model, base_url=args.ollama_url,
+                          temperature=args.temperature)
 
     if do_generation:
-        print(f"Generation: ON (model '{args.model}' via {args.ollama_url})")
+        print(f"Generation: ON (model '{args.model}' via {args.ollama_url}, "
+              f"temperature={args.temperature})")
     else:
         print("Generation: OFF (RSR only)")
 

@@ -23,15 +23,20 @@ Reglas importantes:
 class Generator:
     """LLM-based answer generator using Ollama."""
 
-    def __init__(self, model_name: str = "llama3.1:8b-instruct-q4_K_M", base_url: str = "http://localhost:11434"):
+    def __init__(self, model_name: str = "llama3.1:8b-instruct-q4_K_M",
+                 base_url: str = "http://localhost:11434",
+                 temperature: float = 0.0):
         """Initialize generator with Ollama model.
 
         Args:
             model_name: Name of the Ollama model to use
             base_url: Base URL of Ollama server
+            temperature: Sampling temperature. 0.0 = greedy/deterministic, for
+                reproducible measurements. Higher values increase output variance.
         """
         self.model_name = model_name
         self.base_url = base_url
+        self.temperature = temperature
         # Configure ollama client with custom base URL if needed
         self.client = ollama.Client(host=base_url)
 
@@ -74,7 +79,8 @@ Respondé la pregunta usando únicamente el contexto provisto arriba."""
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_message}
-                ]
+                ],
+                options={"temperature": self.temperature}
             )
             answer = response["message"]["content"]
         except Exception as e:

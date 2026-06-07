@@ -107,7 +107,8 @@ async def lifespan(app: FastAPI):
     # Initialize generator
     generator = Generator(
         model_name=settings.llm_model,
-        base_url=settings.ollama_base_url
+        base_url=settings.ollama_base_url,
+        temperature=settings.llm_temperature
     )
     print(f"✅ Generator initialized with model '{settings.llm_model}'")
 

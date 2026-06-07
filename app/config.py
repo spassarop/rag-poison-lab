@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     llm_model: str = Field(default="llama3.1:8b-instruct-q4_K_M", alias="LLM_MODEL")
     judge_model: str = Field(default="llama3.1:8b-instruct-q4_K_M", alias="JUDGE_MODEL")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
+    # Generation temperature. Default 0.0 = greedy/deterministic, so repeated
+    # measurements are reproducible. Raise it only to study output variance.
+    llm_temperature: float = Field(default=0.0, alias="LLM_TEMPERATURE")
 
     # Embedding & Retrieval
     embed_model: str = Field(default="all-MiniLM-L6-v2", alias="EMBED_MODEL")
