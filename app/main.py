@@ -22,7 +22,7 @@ from app.rag.pipeline import RAGPipeline
 # Pydantic models for request/response
 class RetrieveRequest(BaseModel):
     query: str = Field(..., description="Search query")
-    top_k: int = Field(default=4, ge=1, le=20, description="Number of chunks to retrieve")
+    top_k: int = Field(default=6, ge=1, le=20, description="Number of chunks to retrieve")
 
 
 class RetrieveChunk(BaseModel):

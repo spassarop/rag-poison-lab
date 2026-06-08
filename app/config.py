@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # Embedding & Retrieval
     embed_model: str = Field(default="all-MiniLM-L6-v2", alias="EMBED_MODEL")
-    top_k: int = Field(default=4, alias="TOP_K")
+    top_k: int = Field(default=6, alias="TOP_K")
 
     # ChromaDB
     chroma_path: str = Field(default="http://localhost:8001", alias="CHROMA_PATH")

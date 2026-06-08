@@ -78,7 +78,7 @@ def canary_in_answer(case: Dict[str, Any], answer: str) -> bool:
 def retrieval_sr(
     cases: List[Dict[str, Any]],
     retrieve_fn: Callable[[str, int], List[Dict[str, Any]]],
-    top_k: int = 4,
+    top_k: int = 6,
 ) -> float:
     """Retrieval Success Rate: fraction of cases whose poison enters the top-k.
 
@@ -136,7 +136,7 @@ def evaluate_cases(
     cases: List[Dict[str, Any]],
     retrieve_fn: Callable[[str, int], List[Dict[str, Any]]],
     chat_fn: Callable[[str], Dict[str, Any]],
-    top_k: int = 4,
+    top_k: int = 6,
 ) -> Dict[str, Any]:
     """Evaluate all cases and return per-case detail + aggregates.
 

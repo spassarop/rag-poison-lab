@@ -16,7 +16,7 @@ class Retriever:
         self.collection = collection
         self.embedder = SentenceTransformer(embed_model_name)
 
-    def retrieve(self, query: str, top_k: int = 4) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = 6) -> List[Dict[str, Any]]:
         """Retrieve top-k most relevant chunks for a query.
 
         Args:

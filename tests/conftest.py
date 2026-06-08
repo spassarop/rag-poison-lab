@@ -56,7 +56,7 @@ def chat_fn(client):
 
 @pytest.fixture
 def retrieve_fn(client):
-    """retrieve_fn(query, top_k=4) -> list[chunk dict] (each with id/text/source/score)."""
-    return lambda q, k=4: client.post(
+    """retrieve_fn(query, top_k=6) -> list[chunk dict] (each with id/text/source/score)."""
+    return lambda q, k=6: client.post(
         "/retrieve", json={"query": q, "top_k": k}
     ).json()["chunks"]

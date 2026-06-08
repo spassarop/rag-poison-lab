@@ -253,7 +253,7 @@ Exposes raw retrieval results including chunk IDs, texts, sources, and similarit
 ```json
 {
   "query": "¿Cómo armo una lista de compras desde un menú semanal?",
-  "top_k": 4
+  "top_k": 6
 }
 ```
 
@@ -308,7 +308,7 @@ Copy `.env.example` to `.env` and configure:
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `LLM_TEMPERATURE` | `0.0` | Generation temperature. `0.0` = deterministic, for reproducible measurements |
 | `EMBED_MODEL` | `all-MiniLM-L6-v2` | Sentence-transformers embedding model |
-| `TOP_K` | `4` | Number of chunks to retrieve |
+| `TOP_K` | `6` | Number of chunks to retrieve |
 | `CHROMA_PATH` | `http://localhost:8001` | ChromaDB storage path (or HTTP URL) |
 | `CHROMA_COLLECTION` | `cocina_kb` | Collection name |
 | `CHUNK_SIZE` | `512` | Text chunk size (characters) |

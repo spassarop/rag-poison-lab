@@ -5,7 +5,7 @@ from typing import Dict, Any, List
 class RAGPipeline:
     """End-to-end RAG pipeline combining retrieval and generation."""
 
-    def __init__(self, retriever, generator, top_k: int = 4):
+    def __init__(self, retriever, generator, top_k: int = 6):
         """Initialize pipeline with retriever and generator.
 
         Args:

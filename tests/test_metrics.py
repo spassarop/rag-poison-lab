@@ -41,7 +41,7 @@ def test_retrieval_sr_half():
         if "pago" in q:
             return [{"id": "poison_t1_refunds.md::0"}, {"id": "faq.md::0"}]
         return [{"id": "faq.md::0"}, {"id": "billing.md::1"}]
-    assert retrieval_sr(CASES, retrieve_fn, top_k=4) == 0.5
+    assert retrieval_sr(CASES, retrieve_fn, top_k=6) == 0.5
 
 
 def test_generation_cr_conditional_on_retrieval():
@@ -70,7 +70,7 @@ def test_evaluate_cases_aggregates():
             return {"answer": f"andá a {CANARY}", "retrieved_ids": ["poison_t1_refunds.md::0"]}
         return {"answer": "no tengo info", "retrieved_ids": ["faq.md::0"]}
 
-    rep = evaluate_cases(CASES, retrieve_fn, chat_fn, top_k=4)
+    rep = evaluate_cases(CASES, retrieve_fn, chat_fn, top_k=6)
     assert rep["rsr"] == 0.5
     assert rep["gcr_conditional"] == 1.0
     assert rep["gcr_absolute"] == 0.5
