@@ -21,12 +21,6 @@ import chromadb
 from app.config import settings
 from app.rag.ingest import ingest
 
-import urllib3, warnings
-# Suppress only the specific urllib3 Insecure Request Warning
-warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
-
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Seed ChromaDB with Cocina Cloud knowledge base"
@@ -58,6 +52,19 @@ def main():
         default=None,
         help=f"Collection name (default: from .env or {settings.chroma_collection})"
     )
+    parser.add_argument(
+        "--with-poison",
+        action="store_true",
+        help="Also ingest the poisoned documents into the SAME collection. This "
+             "makes the live knowledge base vulnerable (used for the demo and the "
+             "test harness, where the assertions are expected to fail red)."
+    )
+    parser.add_argument(
+        "--poison-corpus",
+        type=Path,
+        default=Path("corpus/poisoned"),
+        help="Path to the poisoned corpus (default: corpus/poisoned)"
+    )
 
     args = parser.parse_args()
 
@@ -75,6 +82,7 @@ def main():
     print(f"ChromaDB: {chroma_path}")
     print(f"Collection: {collection_name}")
     print(f"Reset: {'Yes (delete existing)' if reset else 'No (append)'}")
+    print(f"Poison: {'Yes (--with-poison)' if args.with_poison else 'No'}")
     print(f"Embedding model: {settings.embed_model}")
     print(f"Chunk size: {settings.chunk_size}, overlap: {settings.chunk_overlap}")
     print()
@@ -82,7 +90,7 @@ def main():
     # Check corpus exists
     if not args.corpus.exists():
         print(f"❌ Corpus directory not found: {args.corpus}", file=sys.stderr)
-        print(f"   Run scripts/generate_static_corpus.py first", file=sys.stderr)
+        print(f"   Run: python attacks/generate_corpus.py --count 50 first", file=sys.stderr)
         sys.exit(1)
 
     doc_count = len(list(args.corpus.glob("*.md")))
@@ -137,6 +145,29 @@ def main():
         print(f"Chunks created: {result['chunks_created']}")
         print(f"Chunks stored: {result['chunks_stored']}")
         print()
+
+        # Optionally ingest the poisoned documents into the SAME collection,
+        # appending (reset=False) so the legitimate corpus is preserved. This is
+        # what makes the live KB vulnerable for the demo and the test harness.
+        if args.with_poison:
+            if not args.poison_corpus.exists():
+                print(f"❌ Poison corpus not found: {args.poison_corpus}", file=sys.stderr)
+                print("   Run: python attacks/generate_poisoned_corpus.py", file=sys.stderr)
+                sys.exit(1)
+            poison_count = len(list(args.poison_corpus.glob("*.md")))
+            print(f"☠️  Ingesting {poison_count} poisoned documents from {args.poison_corpus} ...")
+            poison_result = ingest(
+                corpus_path=str(args.poison_corpus),
+                chroma_client=chroma_client,
+                collection_name=collection_name,
+                chunk_size=settings.chunk_size,
+                chunk_overlap=settings.chunk_overlap,
+                embed_model=settings.embed_model,
+                reset=False,  # append; do NOT wipe the legitimate corpus
+            )
+            print(f"☠️  Poison documents loaded: {poison_result['docs_loaded']}, "
+                  f"chunks stored: {poison_result['chunks_stored']}")
+            print()
 
         # Verify collection
         collection = chroma_client.get_collection(name=collection_name)

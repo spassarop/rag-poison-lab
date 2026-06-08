@@ -40,6 +40,39 @@ class Generator:
         # Configure ollama client with custom base URL if needed
         self.client = ollama.Client(host=base_url)
 
+    def build_messages(self, question: str, context_chunks: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        """Assemble the (system, user) messages sent to the LLM.
+
+        Exposed separately so debugging tools can inspect the exact prompt — the
+        full retrieved context plus the question — that the model actually receives.
+
+        Args:
+            question: User's question
+            context_chunks: List of retrieved chunks (each with 'text', 'source')
+
+        Returns:
+            List of chat messages: [system, user]
+        """
+        context_parts = []
+        for i, chunk in enumerate(context_chunks, 1):
+            source = chunk.get("source", "unknown")
+            text = chunk.get("text", "")
+            context_parts.append(f"[{i}] Fuente: {source}\n{text}\n")
+
+        context = "\n".join(context_parts)
+
+        # TODO: Apply spotlighting/datamarking here if DEFENSE_SPOTLIGHTING is active.
+        # This would wrap the context in delimiters and modify the prompt to enforce boundaries.
+        user_message = (
+            f"CONTEXTO:\n{context}\n\n"
+            f"PREGUNTA:\n{question}\n\n"
+            f"Respondé la pregunta usando únicamente el contexto provisto arriba."
+        )
+        return [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ]
+
     def generate(self, question: str, context_chunks: List[Dict[str, Any]]) -> str:
         """Generate an answer to the question using retrieved context.
 
@@ -50,36 +83,13 @@ class Generator:
         Returns:
             Generated answer string
         """
-        # Build context section from chunks
-        context_parts = []
-        for i, chunk in enumerate(context_chunks, 1):
-            source = chunk.get("source", "unknown")
-            text = chunk.get("text", "")
-            context_parts.append(f"[{i}] Fuente: {source}\n{text}\n")
-
-        context = "\n".join(context_parts)
-
-        # Construct user message with context and question
-        user_message = f"""CONTEXTO:
-{context}
-
-PREGUNTA:
-{question}
-
-Respondé la pregunta usando únicamente el contexto provisto arriba."""
-
-        # TODO: Apply spotlighting/datamarking here if DEFENSE_SPOTLIGHTING is active
-        # This would wrap the context in special delimiters and modify the prompt to enforce boundaries
-        # user_message = apply_spotlighting(context, question) if defense_active else user_message
+        messages = self.build_messages(question, context_chunks)
 
         # Call Ollama
         try:
             response = self.client.chat(
                 model=self.model_name,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_message}
-                ],
+                messages=messages,
                 options={"temperature": self.temperature}
             )
             answer = response["message"]["content"]
