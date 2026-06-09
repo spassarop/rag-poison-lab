@@ -22,6 +22,16 @@ from tests.cases import load_attack_cases
 API = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
+def pytest_generate_tests(metafunc):
+    """Parametrize any test taking a `case` arg with every YAML attack case.
+
+    Lives in conftest so it applies across all test modules (L2 and L3 share it).
+    """
+    if "case" in metafunc.fixturenames:
+        cases = load_attack_cases()
+        metafunc.parametrize("case", cases, ids=[c["id"] for c in cases])
+
+
 @pytest.fixture(scope="session")
 def client():
     """Session HTTP client against the running API. Exits clearly if unreachable."""

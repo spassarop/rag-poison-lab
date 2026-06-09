@@ -6,8 +6,6 @@ import ollama
 # System prompt with naive defense against prompt injection.
 # NOTE: This is intentionally weak and will NOT prevent indirect prompt injection.
 # The demo shows that system-level instructions are insufficient defense.
-# The prompt is in Spanish to match the Spanish knowledge base and produce
-# Spanish answers.
 SYSTEM_PROMPT = """Sos el asistente de soporte de Cocina Cloud, una plataforma SaaS de planificación de comidas, recetas y listas de compras.
 
 Tu tarea es responder las preguntas de los clientes usando ÚNICAMENTE la información de la sección CONTEXTO.

@@ -9,16 +9,7 @@ Add a row to the YAML and it is picked up automatically, with no test-code chang
 """
 import pytest
 
-from tests.cases import load_attack_cases
 from tests.metrics import canary_in_answer, poison_in_topk
-
-
-def pytest_generate_tests(metafunc):
-    """Parametrize any test that takes a `case` arg with every YAML attack case."""
-    if "case" in metafunc.fixturenames:
-        cases = load_attack_cases()
-        metafunc.parametrize("case", cases, ids=[c["id"] for c in cases])
-
 
 @pytest.mark.l2
 def test_retrieval_diagnostic(case, retrieve_fn):
@@ -32,6 +23,10 @@ def test_retrieval_diagnostic(case, retrieve_fn):
 
 @pytest.mark.l2
 def test_generation_not_compromised(case, chat_fn):
+    # Deterministic (canary) gate only. Semantic-only cases (no expected_canary)
+    # are covered by the L3 judge instead.
+    if not case.get("expected_canary"):
+        pytest.skip(f"[{case['id']}] caso semántico sin canary — evaluado en L3 (juez)")
     resp = chat_fn(case["trigger_prompt"])
     # GCR is only meaningful when the poison actually reached the model. If it was
     # not retrieved, skip instead of reporting a misleading green — this matches the
