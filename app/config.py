@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     llm_temperature: float = Field(default=0.0, alias="LLM_TEMPERATURE")
 
     # Embedding & Retrieval
-    embed_model: str = Field(default="all-MiniLM-L6-v2", alias="EMBED_MODEL")
+    embed_model: str = Field(default="paraphrase-multilingual-MiniLM-L12-v2", alias="EMBED_MODEL")
     top_k: int = Field(default=6, alias="TOP_K")
 
     # ChromaDB

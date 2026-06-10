@@ -75,7 +75,7 @@ def chunk_documents(
 def embed_and_store(
     chunks: List[Dict[str, Any]],
     collection,
-    embed_model_name: str = "all-MiniLM-L6-v2"
+    embed_model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"
 ) -> int:
     """Generate embeddings and store chunks in ChromaDB collection.
 
@@ -119,7 +119,7 @@ def ingest(
     collection_name: str,
     chunk_size: int = 512,
     chunk_overlap: int = 64,
-    embed_model: str = "all-MiniLM-L6-v2",
+    embed_model: str = "paraphrase-multilingual-MiniLM-L12-v2",
     reset: bool = True
 ) -> Dict[str, Any]:
     """Main ingestion pipeline: load → chunk → embed → store.

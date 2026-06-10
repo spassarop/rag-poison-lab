@@ -6,7 +6,7 @@ from sentence_transformers import SentenceTransformer
 class Retriever:
     """Dense retrieval using sentence-transformers embeddings and ChromaDB."""
 
-    def __init__(self, collection, embed_model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, collection, embed_model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"):
         """Initialize retriever with ChromaDB collection and embedding model.
 
         Args:

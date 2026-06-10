@@ -97,12 +97,14 @@ white-box tooling and added as a precomputed passage.
 | API Framework | FastAPI | REST API with Pydantic models |
 | ASGI Server | uvicorn | Development and production |
 | Vector Database | ChromaDB | Persistent storage, cosine similarity |
-| Embeddings | sentence-transformers | `all-MiniLM-L6-v2` (384 dim) |
+| Embeddings | sentence-transformers | `paraphrase-multilingual-MiniLM-L12-v2` (384 dim) |
 | Text Chunking | langchain-text-splitters | Recursive character splitter |
 | LLM | Ollama | `llama3.1:8b-instruct-q4_K_M` (local) |
 | Testing | pytest | Test harness with HTML reports |
 | Containerization | Docker Compose | ChromaDB containerized (optional) |
 | Defense Library | Veritensor | RAG firewall (`veritensor[rag]`) |
+
+NOTE: Initially used `all-MiniLM-L6-v2` for embedding but that works fine with English-only content.
 
 ### Infrastructure Setup
 
@@ -311,7 +313,7 @@ Copy `.env.example` to `.env` and configure:
 | `JUDGE_MODEL` | `llama3.1:8b-instruct-q4_K_M` | Model for LLM-as-judge evaluation (later) |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `LLM_TEMPERATURE` | `0.0` | Generation temperature. `0.0` = deterministic, for reproducible measurements |
-| `EMBED_MODEL` | `all-MiniLM-L6-v2` | Sentence-transformers embedding model |
+| `EMBED_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | Sentence-transformers embedding model |
 | `TOP_K` | `6` | Number of chunks to retrieve |
 | `CHROMA_PATH` | `http://localhost:8001` | ChromaDB storage path (or HTTP URL) |
 | `CHROMA_COLLECTION` | `cocina_kb` | Collection name |
