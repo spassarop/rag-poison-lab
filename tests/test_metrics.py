@@ -15,7 +15,7 @@ from tests.metrics import (
     case_layer,
 )
 
-CANARY = "http://secure-login-update.cocina-cloud-phish.test/login"
+CANARY = "http://login-update.cocinacloud.test/login"
 
 CASES = [
     {"id": "a", "tier": 1, "technique": "query_aligned_injection",
