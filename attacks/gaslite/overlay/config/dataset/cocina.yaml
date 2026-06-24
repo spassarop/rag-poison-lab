@@ -1,0 +1,7 @@
+# Local custom BEIR dataset — Cocina Cloud KB (RAG-poisoning lab).
+# Built offline by `build_cocina_beir.py` into `data/cocina/`.
+# `load_dataset` has a dedicated 'cocina' branch that loads it locally
+# (no download, no english-only split mapping).
+dataset_name: cocina
+data_split: test
+data_portion: 1.0

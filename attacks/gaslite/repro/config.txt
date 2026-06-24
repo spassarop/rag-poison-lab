@@ -1,0 +1,27 @@
+# Reproduction record — fill in after each real (non-smoke) GASLITE run.
+# The "why/how" lives in ../README.md; this file is the "what I actually ran".
+
+repo_commit:        <git -C repo rev-parse HEAD>      # GASLITE commit (pin via GASLITE_COMMIT)
+date:               <YYYY-MM-DD>
+hardware:           <e.g. RTX 4090 / Colab A100 / M-series CPU>
+device:             <cuda | mps | cpu>                # GASLITE_DEVICE
+
+attack:             <knows-all | knows-what | knows-what-fluent>
+model.model_hf_name: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+model.sim_func_name: cos_sim
+dataset:            cocina
+core_objective:     <single-query | covering>
+cover_alg:          <none | concept-cocina>
+budget (n_clusters): <1 | ...>
+constraints:        <as-suffix-tox | as-suffix-tox-and-flu>
+attack_n_iter:      <100 | ...>
+trigger_len:        <100 | 60 | ...>                  # lower if full passage > 512 chars
+random_seed:        <N>
+
+# Concept queries source (knows-what): ../concept_queries_cocina.json  (N queries, 50/50 held-in/out)
+
+# Result
+adv_passage_rank:   <0 = top-1 expected>
+appeared@10:        <held-out queries>
+full_passage_len:   <chars; must be <= 512 to fit one SUT chunk>
+notes:              <any deviation from defaults>

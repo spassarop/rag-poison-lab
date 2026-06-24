@@ -240,3 +240,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# GASLITE upstream clone — regenerable via attacks/gaslite/setup_gaslite.sh
+attacks/gaslite/repo/
+attacks/gaslite/.venv/

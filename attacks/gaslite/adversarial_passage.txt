@@ -1,0 +1,7 @@
+__GASLITE_PLACEHOLDER__
+Este es un placeholder, NO un passage adversarial real.
+
+Reemplazá TODO el contenido de este archivo con el passage generado por GASLITE
+offline (ver README.md de esta carpeta). Mientras exista la línea
+"__GASLITE_PLACEHOLDER__", el generador del corpus envenenado SALTEA el caso t3
+(no lo siembra) para no reportar números de RSR falsos.

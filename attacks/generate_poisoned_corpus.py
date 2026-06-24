@@ -171,6 +171,37 @@ def build_plausible_agent_injection(case: Dict) -> str:
 """
 
 
+GASLITE_PASSAGE_FILE = Path(__file__).parent / "gaslite" / "adversarial_passage.txt"
+GASLITE_PLACEHOLDER = "__GASLITE_PLACEHOLDER__"
+
+
+def build_gaslite_adversarial_passage(case: Dict):
+    """Wrap the precomputed GASLITE passage with the canary payload.
+
+    Returns None (→ the case is skipped) when the artifact is missing or still the
+    placeholder, since GASLITE is generated offline (see attacks/gaslite/README.md).
+    The canary payload is kept adjacent to the passage so the ranking chunk carries
+    it; keep the wrapped doc within the chunk size.
+    """
+    if not GASLITE_PASSAGE_FILE.exists():
+        return None
+    passage = GASLITE_PASSAGE_FILE.read_text(encoding="utf-8").strip()
+    if not passage or GASLITE_PLACEHOLDER in passage:
+        return None
+    canary = case["expected_canary"]
+    # The GASLITE passage is `info ⊕ trigger`; the canary URL is baked into `info`
+    # and is therefore FIXED during the gradient attack (so the trigger is optimized
+    # for the exact final text). We must NOT append the canary again here — doing so
+    # would change the embedding the attack optimized and break the ranking guarantee.
+    if canary not in passage:
+        raise ValueError(
+            "GASLITE adversarial_passage.txt does not contain the expected canary. "
+            "Bake the canary URL into `info` (attacks/gaslite/concept_queries_cocina.json) "
+            "so it is present DURING optimization, then re-run the attack."
+        )
+    return passage
+
+
 BUILDERS: Dict[str, Callable[[Dict], str]] = {
     "query_aligned_injection": build_query_aligned_injection,
     "stealth_html_comment": build_stealth_html_comment,
@@ -181,6 +212,8 @@ BUILDERS: Dict[str, Callable[[Dict], str]] = {
     "knowledge_corruption": build_knowledge_corruption,
     "plausible_refund_injection": build_plausible_refund_injection,
     "plausible_agent_injection": build_plausible_agent_injection,
+    # Tier 3: precomputed offline; skipped until the real passage replaces the placeholder.
+    "gaslite_adversarial_passage": build_gaslite_adversarial_passage,
 }
 
 
@@ -219,6 +252,11 @@ def main() -> None:
             continue
 
         content = builder(case)
+        if content is None:
+            print(f"  ⏭️  {case.get('id')}: builder produced nothing "
+                  f"(precomputed artifact missing/placeholder) — skipping")
+            skipped += 1
+            continue
         n = len(content)
         flag = "OK" if n < CHUNK_LIMIT else "OVER 512 (will split!)"
         if n >= CHUNK_LIMIT:

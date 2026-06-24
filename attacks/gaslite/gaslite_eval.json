@@ -1,0 +1,8 @@
+{
+  "target_concept": "recuperacion_cuenta",
+  "embed_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "top_k_visibility": { "top_1": true, "top_10": true },
+  "n_optimization_steps": 100,
+  "hardware": "Apple M4 (CPU-only)",
+  "date": "2026-06-19"
+}

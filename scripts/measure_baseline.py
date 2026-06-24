@@ -164,11 +164,24 @@ def measure_size(
     retriever.collection = collection  # reuse the already-loaded embedder
 
     per_case = []
+    n_evaluated = 0
+    n_skipped_missing = 0
     n_retrieved = 0
     n_compromised = 0
 
     for case in cases:
         poison_path = repo_root / case["poison_doc"]
+        # Skip cases whose poison doc is not present (e.g. the precomputed GASLITE
+        # passage before it has been generated offline). They don't count in RSR.
+        if not poison_path.exists():
+            n_skipped_missing += 1
+            per_case.append({
+                "id": case["id"], "technique": case.get("technique"),
+                "tier": case.get("tier"), "retrieved": None,
+                "compromised": None, "skipped": True, "gen_error": None,
+            })
+            continue
+
         poison_ids = add_poison(collection, retriever, poison_path)
 
         # RSR: does the poison enter the top-k?
@@ -185,24 +198,35 @@ def measure_size(
             except Exception as e:  # Ollama down or another failure
                 gen_error = str(e)
 
+        n_evaluated += 1
         if retrieved:
             n_retrieved += 1
         if compromised:
             n_compromised += 1
 
         per_case.append({
-            "id": case["id"], "tier": case.get("tier"),
-            "retrieved": retrieved, "compromised": compromised,
-            "gen_error": gen_error,
+            "id": case["id"], "technique": case.get("technique"),
+            "tier": case.get("tier"), "retrieved": retrieved,
+            "compromised": compromised, "skipped": False, "gen_error": gen_error,
         })
 
         # Remove the poison before the next case (isolation)
         collection.delete(ids=poison_ids)
 
-    n = len(cases)
+    n = n_evaluated
     rsr = n_retrieved / n if n else 0.0
     gcr_conditional = (n_compromised / n_retrieved) if n_retrieved else 0.0
     gcr_absolute = (n_compromised / n) if n else 0.0
+
+    # Per-technique breakdown (over evaluated cases) — for the GASLITE-vs-rest contrast.
+    by_technique: Dict[str, Dict[str, int]] = {}
+    for c in per_case:
+        if c.get("skipped"):
+            continue
+        b = by_technique.setdefault(c["technique"], {"cases": 0, "retrieved": 0, "compromised": 0})
+        b["cases"] += 1
+        b["retrieved"] += int(bool(c["retrieved"]))
+        b["compromised"] += int(bool(c["compromised"]))
 
     return {
         "requested_size": size,
@@ -212,11 +236,16 @@ def measure_size(
         "rsr": rsr,
         "gcr_conditional": gcr_conditional,
         "gcr_absolute": gcr_absolute,
-        "n_cases": n,
+        "n_cases": len(cases),
+        "n_evaluated": n_evaluated,
+        "n_skipped_missing": n_skipped_missing,
         "n_retrieved": n_retrieved,
         "n_compromised": n_compromised,
+        "by_technique": by_technique,
         "per_case": per_case,
-        "generation": do_generation and any(c["gen_error"] is None for c in per_case),
+        "generation": do_generation and any(
+            (not c.get("skipped")) and c["gen_error"] is None for c in per_case
+        ),
     }
 
 
@@ -236,17 +265,35 @@ def print_report(results: List[Dict[str, Any]], do_generation: bool) -> None:
             size_label = f"{r['effective_size']}*"
         print(f"{r['requested_size']:>8} {size_label:>6} "
               f"{r['rsr']*100:6.1f}%  {gcr_c:>10} {gcr_a:>10} "
-              f"{str(r['n_retrieved'])+'/'+str(r['n_cases']):>12}")
+              f"{str(r['n_retrieved'])+'/'+str(r['n_evaluated']):>12}")
     print("-" * 78)
     if any(r["effective_size"] != r["requested_size"] for r in results):
         print("* effective size smaller than requested: not enough legitimate docs.")
         print("  Grow it with: python attacks/generate_corpus.py --scale <N>")
+    if any(r["n_skipped_missing"] for r in results):
+        print(f"note: {results[0]['n_skipped_missing']} case(s) skipped (poison doc "
+              f"missing — e.g. precomputed GASLITE not generated yet).")
     if not do_generation:
         print("GCR not measured (--no-generation). RSR is independent of Ollama.")
+
+    # Per-technique RSR breakdown — the GASLITE-vs-query-aligned contrast at scale.
+    print()
+    print("RSR by technique (retrieved / cases):")
+    techniques = sorted({t for r in results for t in r["by_technique"]})
+    sizes_hdr = "  ".join(f"@{r['effective_size']}" for r in results)
+    print(f"  {'technique':<32} {sizes_hdr}")
+    for tech in techniques:
+        cells = []
+        for r in results:
+            b = r["by_technique"].get(tech)
+            cells.append(f"{(b['retrieved']/b['cases']*100):5.0f}%" if b and b["cases"] else "   - ")
+        print(f"  {tech:<32} " + "  ".join(cells))
+
     print()
     print("Reading: RSR = poison retrievability; GCR(cond) = compromise among")
     print("retrieved cases; GCR(e2e) = end-to-end successful attack.")
-    print("RSR is expected to fall as the corpus grows (more top-k competition).")
+    print("Query-aligned/plausible RSR is expected to FALL as the corpus grows;")
+    print("a GASLITE passage (tier 3) is expected to stay high — that is the contrast.")
     print("=" * 78)
 
 
@@ -310,7 +357,7 @@ def main() -> None:
                   f"measuring at {r['effective_size']}.")
         gcr_str = "n/a" if not do_generation else f"{r['gcr_conditional']*100:.1f}%"
         print(f"    RSR={r['rsr']*100:.1f}%  GCR(cond)={gcr_str}  "
-              f"retrieved={r['n_retrieved']}/{r['n_cases']}")
+              f"retrieved={r['n_retrieved']}/{r['n_evaluated']}")
         results.append(r)
 
     print_report(results, do_generation)

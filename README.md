@@ -144,7 +144,12 @@ rag-poison-lab/
 ├── attacks/                    # Attack tooling
 │   ├── generate_corpus.py             # Ollama-based legitimate corpus generator
 │   ├── generate_poisoned_corpus.py    # Builds poisoned docs from the contract
-│   └── corpus_attacks.yaml            # Parameterized attack cases (the test contract)
+│   ├── corpus_attacks.yaml            # Parameterized attack cases (the test contract)
+│   └── gaslite/                       # Tier 3: gradient-optimized passage (precomputed offline)
+│       ├── README.md                  # How to reproduce the attack (GPU/Colab)
+│       ├── adversarial_passage.txt    # The passage artifact (placeholder until generated)
+│       ├── gaslite_eval.json          # covering.py top-k visibility metrics
+│       └── repro/                     # Exact config used to craft it
 │
 ├── scripts/                    # Utility scripts
 │   ├── seed_db.py              # Ingest corpus into ChromaDB (--with-poison for the demo)
@@ -621,6 +626,66 @@ shows the same cases moving from compromised to safe — the red→green story.
 `security_report.py` is the **posture report** you track over time and across defense
 changes. The JSON script is the piece designed to be lifted and pointed at your own
 RAG.
+
+## Advanced Attack: GASLITE (tier 3)
+
+> **Defensive / authorized use only.**
+
+Tiers 1–2 depend on the attacker *writing* text that looks relevant. **GASLITE**
+(arXiv:2412.20953) instead optimizes a passage by **gradient** against the embedding
+model so it dominates the dense retriever's ranking **even at scale and without
+human-suspicious strings**. It is the canonical **OWASP LLM08 (Vector and Embedding
+Weaknesses)** attack, and in the defense stage it is what shows that signature-based
+ingestion filters do not catch everything.
+
+**Why it is precomputed offline.** GASLITE needs gradient optimization (ideally a
+GPU) and its official repo pins **Python 3.8.5** — incompatible with this project's
+3.11 SUT. So it is run **once, offline, in an isolated environment** (CPU, local GPU or
+Google Colab), and only the resulting passage is committed as an artifact under
+`attacks/gaslite/`. It is **never** run in CI or in the SUT path. The case
+`t3_gaslite_pwd_reset` is marked `precomputed: true`, and the corpus generator
+**skips** it until `attacks/gaslite/adversarial_passage.txt` is replaced with a real
+passage (a `__GASLITE_PLACEHOLDER__` sentinel ships by default).
+
+The full step-by-step reproduction guide (env setup, Hydra overrides to target
+`paraphrase-multilingual-MiniLM-L12-v2` and the query `¿Cómo recupero mi contraseña?`,
+`covering.py` evaluation, and where to drop the artifacts) is in
+[`attacks/gaslite/README.md`](attacks/gaslite/README.md).
+
+**The point of the tier.** `scripts/measure_baseline.py` prints an RSR-by-technique
+breakdown across corpus sizes. The expected contrast — the slide of the talk — is
+that query-aligned/plausible RSR **falls** as the corpus grows, while the GASLITE
+passage **stays retrievable**. That is why a defender cannot rely on retrieval being
+"hard" at scale.
+
+### Retrieval ≠ generation (the key GASLITE lesson)
+
+GASLITE wins the *retrieval* stage but does **not**, by itself, compromise
+*generation*. Observed against this SUT, with a single optimized passage (budget 1):
+
+- The passage is retrieved **top-1** for the target query (RSR = 100%).
+- But the answer is **not** compromised (GCR = 0): the model ignores the poison and
+  answers from the legitimate chunks.
+
+Two reasons: (1) the gradient-optimized trigger is **incoherent text** ("oralimstern
+vende ozna…"), so the chunk reads as corrupted and the LLM trusts the coherent
+legitimate chunks instead; (2) because the attack targets the password-reset concept,
+the top-k also pulls the **most authoritative legitimate** docs on exactly that
+topic, which out-argue the poison. GASLITE optimizes geometry (cosine to the query
+centroid), not persuasion.
+
+This is the payoff of measuring **two metrics**: RSR and GCR are independent. You can
+have **RSR = 100% and GCR = 0%**. GASLITE is fundamentally a **retrieval** attack
+(OWASP LLM08); the end-to-end threat is GASLITE retrievability **combined with** a
+coercive payload, or with enough **attacker budget**:
+
+> **Budget raises GCR.** With a single copy the poison holds one of the top-k slots
+> and loses to the legitimate context. Adding more adversarial passages (budget ≥ 2,
+> the paper's multi-passage setting, App. D) makes the poison occupy several top-k
+> slots, crowding out the legitimate docs — at which point the generation **does**
+> flip and the canary appears. So the defense story must cover **both** stages:
+> retrieval (keep the poison out of / down-weighted in the top-k) and generation
+> (don't obey retrieved instructions, scan the output).
 
 ## Corpus Generation
 
