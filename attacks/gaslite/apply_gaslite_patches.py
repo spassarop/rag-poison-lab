@@ -135,6 +135,90 @@ def patch_full_attack(s):
     return s
 
 
+# --- 5. fluency_scorer.py: multilingual MLM scorer (xlm-roberta) ------------
+_XLMR_CLASS = '''class MultilingualMLMFluencyScorer(BertMLMFluencyScorer):
+    """MLM fluency scorer on an arbitrary HF masked-LM, loaded generically so its
+    tokenizer/vocab can MATCH a non-English retriever. Defaults to xlm-roberta-base,
+    whose XLM-R tokenizer matches `paraphrase-multilingual-MiniLM-L12-v2` (the SUT
+    retriever) — so the tokenizer-class check passes, the trigger token-ids index the
+    right embedding table, and fluency is scored MULTILINGUALLY (incl. Spanish).
+    Reuses all scoring logic from BertMLMFluencyScorer; only the model load differs.
+    """
+    def __init__(self, batch_size: int = 128, model_name: str = "xlm-roberta-base",
+                 target_num_embeddings: int = None, **kwargs):
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForMaskedLM.from_pretrained(model_name)
+        # The retriever's embedding matrix may be padded beyond the tokenizer vocab
+        # (e.g. paraphrase-multilingual-MiniLM-L12-v2 has 250037 rows vs xlm-r's 250002).
+        # The trigger one-hot is built over the retriever's embedding width, so resize to
+        # match — extra rows map to never-emitted padding ids, so they don't affect scoring.
+        if target_num_embeddings and target_num_embeddings != self.model.get_input_embeddings().num_embeddings:
+            self.model.resize_token_embeddings(target_num_embeddings)
+        self.model = self.model.to(DEVICE)
+        self.input_embedding = self.model.get_input_embeddings()  # AFTER resize; generic, model-agnostic
+        self.batch_size = batch_size
+        self.model.eval()
+        for param in self.model.parameters():
+            param.requires_grad = False
+
+
+class GPT2FluencyScorer:'''
+
+
+def patch_fluency(s):
+    if "MultilingualMLMFluencyScorer" in s:
+        return s
+    # 5a. import AutoModelForMaskedLM
+    s = s.replace(
+        "from transformers import DistilBertTokenizer, DistilBertForMaskedLM, AutoTokenizer, AutoModelForCausalLM",
+        "from transformers import DistilBertTokenizer, DistilBertForMaskedLM, AutoTokenizer, AutoModelForCausalLM, AutoModelForMaskedLM",
+        1)
+    # 5b. insert the class before GPT2FluencyScorer
+    s = s.replace("class GPT2FluencyScorer:", _XLMR_CLASS, 1)
+    # 5c. register in initialize_fluency_model
+    s = s.replace(
+        "    elif fluency_model_name == 'bert_mlm':\n        return BertMLMFluencyScorer(**kwargs)",
+        "    elif fluency_model_name == 'bert_mlm':\n        return BertMLMFluencyScorer(**kwargs)\n"
+        "    elif fluency_model_name == 'xlmr_mlm':\n"
+        "        # Multilingual MLM (xlm-roberta-base) — matches the XLM-R tokenizer of\n"
+        "        # paraphrase-multilingual-MiniLM-L12-v2. See MultilingualMLMFluencyScorer.\n"
+        "        return MultilingualMLMFluencyScorer(**kwargs)",
+        1)
+    return s
+
+
+# --- 6. gaslite.py: relax fluency tokenizer check (class -> vocab) ----------
+def patch_gaslite_check(s):
+    # 6c. ensure `import os` (used by the fluency-batch env override below)
+    if "\nimport os\n" not in s:
+        s = s.replace("import math\nimport random", "import math\nimport os\nimport random", 1)
+    # 6b. pass the retriever's embedding width to the fluency scorer (resize alignment)
+    #     + use a small fluency batch by default (xlm-r 250k-vocab logits OOM the CPU).
+    call_old = "    flu_model = initialize_fluency_model(fluency_model_name, batch_size=128)  # TODO generalize"
+    call_new = ('    flu_model = initialize_fluency_model(\n'
+                '        fluency_model_name, batch_size=int(os.environ.get("GASLITE_FLU_BATCH", "16")),\n'
+                '        target_num_embeddings=model.get_input_embeddings().num_embeddings)  # patched: align width + small flu batch (CPU OOM)')
+    if call_old in s:
+        s = s.replace(call_old, call_new, 1)
+    # 6a. relax tokenizer check (class -> vocab)
+    old = ("            and model.tokenizer.__class__ != flu_model.tokenizer.__class__  # and we have tokenizer mismatch\n"
+           "    ):\n"
+           '        raise ValueError("Fluency model\'s tokenizer and the model\'s tokenizer must match.")')
+    new = ("            and model.tokenizer.get_vocab() != flu_model.tokenizer.get_vocab()  # VOCAB mismatch (not just class)\n"
+           "    ):\n"
+           "        # The real requirement is that token id -> token string agrees between the two\n"
+           "        # tokenizers (trigger ids from the retriever index the fluency model's embedding).\n"
+           "        # Comparing classes is too strict (fast/slow or wrapper differences); compare vocab.\n"
+           "        raise ValueError(\n"
+           '            "Fluency model\'s tokenizer and the model\'s tokenizer must match (vocab differs). "\n'
+           '            f"retriever={model.tokenizer.__class__.__name__}(vocab={model.tokenizer.vocab_size}) "\n'
+           '            f"fluency={flu_model.tokenizer.__class__.__name__}(vocab={flu_model.tokenizer.vocab_size})."\n'
+           "        )")
+    if "get_vocab() != flu_model" in s:
+        return s
+    return s.replace(old, new, 1)
+
+
 def main():
     print(f"Applying GASLITE lab patches under: {REPO}")
     for f in CUDA_FILES:
@@ -142,6 +226,8 @@ def main():
     edit("src/data_utils.py", patch_data_utils, "local 'cocina' dataset branch")
     edit("hydra_entrypoint.py", patch_hydra, "list query_choice + model fallback")
     edit("src/full_attack.py", patch_full_attack, "query_choice/list + _get_best_query_emb guards")
+    edit("src/attacks/fluency_scorer.py", patch_fluency, "multilingual (xlm-roberta) MLM fluency scorer")
+    edit("src/attacks/gaslite.py", patch_gaslite_check, "relax fluency tokenizer check (class -> vocab)")
     # sanity: every cuda file must end up importing DEVICE
     bad = [f for f in CUDA_FILES if "from src._device import DEVICE" not in (REPO / f).read_text(encoding="utf-8")]
     if bad:
