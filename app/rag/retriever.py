@@ -1,6 +1,18 @@
 """Retrieval module: semantic search over ChromaDB using dense embeddings."""
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from sentence_transformers import SentenceTransformer
+
+
+def role_where(role: str, enabled: bool) -> Optional[Dict[str, str]]:
+    """ChromaDB `where` clause for retrieval-time access control.
+
+    With the filter enabled, the public-facing "customer" role is restricted to
+    chunks marked sensitivity="public"; privileged roles (anything else) see all.
+    Pure function so it can be unit-tested without ChromaDB.
+    """
+    if enabled and role == "customer":
+        return {"sensitivity": "public"}
+    return None
 
 
 class Retriever:
@@ -16,24 +28,33 @@ class Retriever:
         self.collection = collection
         self.embedder = SentenceTransformer(embed_model_name)
 
-    def retrieve(self, query: str, top_k: int = 6) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = 6, role: str = "customer") -> List[Dict[str, Any]]:
         """Retrieve top-k most relevant chunks for a query.
 
         Args:
             query: User query string
             top_k: Number of chunks to retrieve
+            role: Caller role. With DEFENSE_RETRIEVAL_FILTER=on, a "customer" only
+                  retrieves chunks marked sensitivity="public" (access control —
+                  "the WHERE clause nobody writes"). Privileged roles see everything.
 
         Returns:
             List of dicts with keys: 'id', 'text', 'source', 'score'
             Sorted by descending relevance (cosine similarity)
         """
+        from app.config import settings
+
         # Generate query embedding
         query_embedding = self.embedder.encode([query])[0]
+
+        # Retrieval-time access control: restrict customers to public chunks.
+        where = role_where(role, settings.defense_retrieval_filter == "on")
 
         # Query ChromaDB
         results = self.collection.query(
             query_embeddings=[query_embedding.tolist()],
             n_results=top_k,
+            where=where,
             include=["documents", "metadatas", "distances"]
         )
 

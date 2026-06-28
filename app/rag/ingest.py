@@ -75,7 +75,8 @@ def chunk_documents(
 def embed_and_store(
     chunks: List[Dict[str, Any]],
     collection,
-    embed_model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"
+    embed_model_name: str = "paraphrase-multilingual-MiniLM-L12-v2",
+    sensitivity: str = "public"
 ) -> int:
     """Generate embeddings and store chunks in ChromaDB collection.
 
@@ -100,7 +101,7 @@ def embed_and_store(
     # Prepare data for ChromaDB
     ids = [chunk["id"] for chunk in chunks]
     documents = texts
-    metadatas = [{"source": chunk["source"]} for chunk in chunks]
+    metadatas = [{"source": chunk["source"], "sensitivity": sensitivity} for chunk in chunks]
 
     # Store in collection
     collection.add(
@@ -120,7 +121,9 @@ def ingest(
     chunk_size: int = 512,
     chunk_overlap: int = 64,
     embed_model: str = "paraphrase-multilingual-MiniLM-L12-v2",
-    reset: bool = True
+    reset: bool = True,
+    sensitivity: str = "public",
+    benign_corpus_path: str = "corpus/legit"
 ) -> Dict[str, Any]:
     """Main ingestion pipeline: load → chunk → embed → store.
 
@@ -157,15 +160,29 @@ def ingest(
 
     # Chunk documents
     chunks = chunk_documents(documents, chunk_size, chunk_overlap)
+    chunks_created = len(chunks)
 
-    # TODO: Apply ingestion defense here if DEFENSE_INGESTION is active
-    # filtered_chunks = apply_ingestion_defense(chunks) if defense_active else chunks
+    # Ingestion defense (DEFENSE_INGESTION): filter malicious chunks before storage.
+    # The anomaly filter calibrates on the legitimate corpus (benign reference) so its
+    # threshold has zero false positives on benign chunks.
+    from app.config import settings
+    from app.defenses.ingestion_guard import apply_ingestion_defense
+    controls = settings.ingestion_controls()
+    blocked: List[Dict[str, Any]] = []
+    if controls:
+        benign_texts = None
+        if "anomaly" in controls:
+            benign_docs = load_documents(benign_corpus_path)
+            benign_texts = [c["text"] for c in chunk_documents(benign_docs, chunk_size, chunk_overlap)]
+        chunks, blocked = apply_ingestion_defense(chunks, controls, benign_texts)
 
     # Embed and store
-    chunks_stored = embed_and_store(chunks, collection, embed_model)
+    chunks_stored = embed_and_store(chunks, collection, embed_model, sensitivity=sensitivity)
 
     return {
         "docs_loaded": len(documents),
-        "chunks_created": len(chunks),
-        "chunks_stored": chunks_stored
+        "chunks_created": chunks_created,
+        "chunks_stored": chunks_stored,
+        "chunks_blocked": len(blocked),
+        "blocked": blocked,
     }

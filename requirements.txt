@@ -20,3 +20,7 @@ langchain-text-splitters>=0.3,<0.4
 
 # LLM client (Ollama). API del cliente estable.
 ollama>=0.3,<0.5
+
+# Optional ingestion firewall for the signature layer (DEFENSE_INGESTION=veritensor).
+# Import-guarded: the project falls back to the builtin SignatureScanner if absent.
+# veritensor[rag]>=1.6

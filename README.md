@@ -130,16 +130,23 @@ rag-poison-lab/
 │   ├── __init__.py
 │   ├── config.py               # Settings from environment
 │   ├── main.py                 # API endpoints: /health, /retrieve, /chat
-│   └── rag/                    # RAG pipeline components
+│   ├── rag/                    # RAG pipeline components
+│   │   ├── __init__.py
+│   │   ├── ingest.py           # Document loading, chunking, embedding, storage
+│   │   ├── retriever.py        # Semantic search over ChromaDB (+ role filter)
+│   │   ├── generator.py        # LLM-based answer generation (+ spotlighting)
+│   │   └── pipeline.py         # Orchestrates retrieval + generation (+ output guard)
+│   └── defenses/               # Defense-in-depth controls (env-toggled)
 │       ├── __init__.py
-│       ├── ingest.py           # Document loading, chunking, embedding, storage
-│       ├── retriever.py        # Semantic search over ChromaDB
-│       ├── generator.py        # LLM-based answer generation
-│       └── pipeline.py         # Orchestrates retrieval + generation
+│       ├── ingestion_guard.py  # Signature scanner (+ optional Veritensor)
+│       ├── anomaly.py          # Perplexity proxy (catches non-fluent GASLITE)
+│       ├── spotlighting.py     # Prompt datamarking
+│       └── output_guard.py     # Canary / external-URL output scan
 │
 ├── corpus/                     # Knowledge base documents
-│   ├── legit/                  # Legitimate Cocina Cloud docs (.md)
-│   └── poisoned/               # Poisoned docs: tier 1 (query-aligned) + tier 2 (stealth)
+│   ├── legit/                  # Legitimate Cocina Cloud docs (.md), sensitivity=public
+│   ├── internal/               # Confidential docs, sensitivity=internal (role filter)
+│   └── poisoned/               # Poisoned docs: tiers 1-2 (generated) + t3 GASLITE (precomputed)
 │
 ├── attacks/                    # Attack tooling
 │   ├── generate_corpus.py             # Ollama-based legitimate corpus generator
@@ -155,7 +162,8 @@ rag-poison-lab/
 │   ├── seed_db.py              # Ingest corpus into ChromaDB (--with-poison for the demo)
 │   ├── measure_baseline.py     # Measure RSR/GCR across corpus sizes
 │   ├── debug_chat.py           # Inspect retrieved chunks + exact prompt + raw answer
-│   └── security_report.py      # L4: write reports/security_report.json (posture)
+│   ├── security_report.py      # L4: write reports/security_report.json (posture)
+│   └── compare_defenses.py     # Off-vs-on RSR/GCR comparison across defense configs
 │
 ├── pytest.ini                  # pytest config (markers l1/l2/l3)
 └── tests/                      # Test harness
@@ -167,7 +175,8 @@ rag-poison-lab/
     ├── conftest.py             # Black-box fixtures + case parametrization
     ├── test_l1_canary.py       # L1: deterministic canary assertion
     ├── test_l2_corpus.py       # L2: parametrized over every attack case
-    └── test_l3_llm_judge.py    # L3: semantic evaluation for canary-less cases
+    ├── test_l3_llm_judge.py    # L3: semantic evaluation for canary-less cases
+    └── test_defenses.py        # Defense layers: which control catches what
 ```
 
 ## Installation
@@ -325,9 +334,10 @@ Copy `.env.example` to `.env` and configure:
 | `CHUNK_SIZE` | `512` | Text chunk size (characters) |
 | `CHUNK_OVERLAP` | `64` | Chunk overlap (characters) |
 | `CANARY_URL` | `http://login-update.cocinacloud.test/login` | Canary token for attack detection |
-| `DEFENSE_INGESTION` | `off` | Ingestion defense (`off` or `veritensor`) |
-| `DEFENSE_SPOTLIGHTING` | `off` | Prompt spotlighting defense |
-| `DEFENSE_OUTPUT` | `off` | Output scanning defense |
+| `DEFENSE_INGESTION` | `off` | Ingestion defense: `off` or a comma-set of `signatures`, `veritensor`, `anomaly` |
+| `DEFENSE_SPOTLIGHTING` | `off` | Prompt spotlighting / datamarking (`off`/`on`) |
+| `DEFENSE_OUTPUT` | `off` | Output scanning for canary / external URLs (`off`/`on`) |
+| `DEFENSE_RETRIEVAL_FILTER` | `off` | Role-based retrieval access control (`off`/`on`); `customer` → public only |
 
 Defense flags are set to `off` initially to demonstrate attacks, then activated to show mitigation.
 
@@ -686,6 +696,61 @@ coercive payload, or with enough **attacker budget**:
 > flip and the canary appears. So the defense story must cover **both** stages:
 > retrieval (keep the poison out of / down-weighted in the top-k) and generation
 > (don't obey retrieved instructions, scan the output).
+
+## Defense in Depth
+
+Controls are added at four stages, each toggled by an environment flag (all start
+`off`, so you can show each one flipping a test from red to green). **No single layer
+is sufficient** — that is the whole point.
+
+| Stage | Control | Flag | Catches | Misses |
+|-------|---------|------|---------|--------|
+| Ingestion | Signature scanner (+ optional Veritensor) | `DEFENSE_INGESTION=signatures` / `veritensor` | overt injection + stealth (HTML comment, white text, zero-width, base64) | fluent plausible injections, GASLITE |
+| Ingestion | Perplexity anomaly filter | `DEFENSE_INGESTION=anomaly` | **non-fluent GASLITE** (high perplexity) | fluent text, a fluent GASLITE variant |
+| Prompt | Spotlighting (datamarking) | `DEFENSE_SPOTLIGHTING=on` | instruction-following from retrieved context (reduces GCR transversally) | — (reduces, does not eliminate) |
+| Output | Output guard (canary / external-URL scan) | `DEFENSE_OUTPUT=on` | the canary reaching the user, regardless of how it was retrieved | knowledge corruption (no URL) |
+| Retrieval | Role filter (access control) | `DEFENSE_RETRIEVAL_FILTER=on` | `customer` retrieving `internal` chunks (exfiltration) | — |
+
+`DEFENSE_INGESTION` takes a comma-set, e.g. `signatures,anomaly`.
+
+**The key chain (and the GASLITE lesson made concrete):**
+
+- A **signature/pattern** scanner catches the *loud* attacks (overt injection markers,
+  obfuscation) but **misses** the fluent plausible-content injections **and GASLITE**
+  (no suspicious strings). Veritensor (`github.com/arsbr/Veritensor`, `veritensor[rag]`)
+  is the production option for this layer; a builtin `SignatureScanner` ships so the
+  demo runs without it.
+- The **anomaly filter** is a *perplexity proxy* (a unigram model calibrated on the
+  benign corpus with a zero-false-positive threshold) and catches the **non-fluent
+  GASLITE** passage that signatures miss. The scorer is pluggable: drop in a real GPT-2
+  perplexity scorer (same interface) for higher fidelity. Per the GASLITE paper, a
+  **fluent** GASLITE variant (GASLITE-Flu) would evade perplexity → the arms race
+  continues, which is why the generation-stage controls still matter.
+- **Spotlighting** and the **output guard** act at generation time, so they reduce
+  damage even for poison that was retrieved (fluent injections, GASLITE).
+- The **role filter** is the "WHERE clause nobody writes": with it on, `role=customer`
+  cannot retrieve `sensitivity=internal` chunks (seed confidential docs in
+  `corpus/internal/` via `seed_db.py`).
+
+**Enable and compare:**
+
+```bash
+# one control at a time (re-seed when toggling an INGESTION control)
+DEFENSE_INGESTION=signatures,anomaly python scripts/seed_db.py --with-poison
+DEFENSE_SPOTLIGHTING=on DEFENSE_OUTPUT=on uvicorn app.main:app
+
+pytest tests/test_defenses.py -v        # deterministic: encodes which layer catches what
+python scripts/compare_defenses.py      # off-vs-on table (RSR/GCR), the closing slide
+```
+
+`tests/test_defenses.py` asserts the message at the function level (signatures catch
+loud / miss fluent+GASLITE; anomaly flags only GASLITE; output guard stops the canary;
+role filter blocks the customer). `scripts/compare_defenses.py` runs the full corpus
+in-process per defense configuration and prints the off-vs-on comparison.
+
+**Disclaimers:** spotlighting *reduces*, it does not *eliminate*, injection. The
+anomaly filter here is a lightweight proxy (swap in GPT-2 perplexity for production
+fidelity). Veritensor is Apache-2.0 and optional.
 
 ## Corpus Generation
 

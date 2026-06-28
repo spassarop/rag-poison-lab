@@ -33,9 +33,21 @@ class Settings(BaseSettings):
     )
 
     # Defense Controls
+    # DEFENSE_INGESTION: "off" or a comma-separated set of {signatures, veritensor, anomaly}
+    #   e.g. "signatures,anomaly". Signatures catch overt+stealth; anomaly catches
+    #   the non-fluent GASLITE passage; neither catches fluent plausible injections.
     defense_ingestion: str = Field(default="off", alias="DEFENSE_INGESTION")
     defense_spotlighting: str = Field(default="off", alias="DEFENSE_SPOTLIGHTING")
     defense_output: str = Field(default="off", alias="DEFENSE_OUTPUT")
+    # Retrieval-time access control: customer role only sees public chunks.
+    defense_retrieval_filter: str = Field(default="off", alias="DEFENSE_RETRIEVAL_FILTER")
+
+    def ingestion_controls(self) -> set:
+        """Parse DEFENSE_INGESTION into a set of active controls (empty if off)."""
+        raw = (self.defense_ingestion or "").strip().lower()
+        if not raw or raw == "off":
+            return set()
+        return {c.strip() for c in raw.split(",") if c.strip() and c.strip() != "off"}
 
     class Config:
         env_file = ".env"

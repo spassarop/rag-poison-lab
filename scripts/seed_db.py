@@ -65,6 +65,12 @@ def main():
         default=Path("corpus/poisoned"),
         help="Path to the poisoned corpus (default: corpus/poisoned)"
     )
+    parser.add_argument(
+        "--internal-corpus",
+        type=Path,
+        default=Path("corpus/internal"),
+        help="Confidential docs ingested with sensitivity=internal (default: corpus/internal)"
+    )
 
     args = parser.parse_args()
 
@@ -144,7 +150,28 @@ def main():
         print(f"Documents loaded: {result['docs_loaded']}")
         print(f"Chunks created: {result['chunks_created']}")
         print(f"Chunks stored: {result['chunks_stored']}")
+        if result.get("chunks_blocked"):
+            print(f"🛡️  Chunks blocked by ingestion defense: {result['chunks_blocked']}")
         print()
+
+        # Ingest internal/confidential docs with sensitivity=internal (appended), so
+        # the retrieval role filter can keep them away from the customer role.
+        if args.internal_corpus.exists() and any(args.internal_corpus.glob("*.md")):
+            n_int = len(list(args.internal_corpus.glob("*.md")))
+            print(f"🔒 Ingesting {n_int} internal document(s) from {args.internal_corpus} "
+                  f"(sensitivity=internal) ...")
+            internal_result = ingest(
+                corpus_path=str(args.internal_corpus),
+                chroma_client=chroma_client,
+                collection_name=collection_name,
+                chunk_size=settings.chunk_size,
+                chunk_overlap=settings.chunk_overlap,
+                embed_model=settings.embed_model,
+                reset=False,
+                sensitivity="internal",
+            )
+            print(f"🔒 Internal chunks stored: {internal_result['chunks_stored']}")
+            print()
 
         # Optionally ingest the poisoned documents into the SAME collection,
         # appending (reset=False) so the legitimate corpus is preserved. This is

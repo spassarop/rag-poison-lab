@@ -36,13 +36,20 @@ class RAGPipeline:
                 - sources: List of unique source filenames
                 - retrieved_ids: List of chunk IDs that were retrieved
         """
+        from app.config import settings
+
         k = top_k if top_k is not None else self.top_k
 
-        # Retrieve relevant chunks
-        chunks = self.retriever.retrieve(query=question, top_k=k)
+        # Retrieve relevant chunks (role drives the retrieval access-control filter)
+        chunks = self.retriever.retrieve(query=question, top_k=k, role=role)
 
         # Generate answer from chunks
         answer_text = self.generator.generate(question=question, context_chunks=chunks)
+
+        # Output guard (last line of defense): scan/sanitize before returning.
+        if settings.defense_output == "on":
+            from app.defenses.output_guard import scan_output
+            _safe, answer_text = scan_output(answer_text)
 
         # Extract unique sources and chunk IDs
         sources = sorted(set(chunk["source"] for chunk in chunks))

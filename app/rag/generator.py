@@ -59,15 +59,22 @@ class Generator:
 
         context = "\n".join(context_parts)
 
-        # TODO: Apply spotlighting/datamarking here if DEFENSE_SPOTLIGHTING is active.
-        # This would wrap the context in delimiters and modify the prompt to enforce boundaries.
+        # Spotlighting (DEFENSE_SPOTLIGHTING): datamark the context as untrusted data
+        # and tell the model never to follow instructions found inside it.
+        from app.config import settings
+        system_content = SYSTEM_PROMPT
+        if settings.defense_spotlighting == "on":
+            from app.defenses.spotlighting import spotlight_context, SPOTLIGHT_SYSTEM
+            context = spotlight_context(context)
+            system_content = SYSTEM_PROMPT + "\n\n" + SPOTLIGHT_SYSTEM
+
         user_message = (
             f"CONTEXTO:\n{context}\n\n"
             f"PREGUNTA:\n{question}\n\n"
             f"Respondé la pregunta usando únicamente el contexto provisto arriba."
         )
         return [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_content},
             {"role": "user", "content": user_message},
         ]
 
