@@ -1,5 +1,5 @@
 """Configuration management using pydantic-settings and python-dotenv."""
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
 
@@ -52,13 +52,14 @@ class Settings(BaseSettings):
             return set()
         return {c.strip() for c in raw.split(",") if c.strip() and c.strip() != "off"}
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        # Ignore unknown env vars so a partial deploy (new .env, older code, or vice
-        # versa) degrades gracefully instead of crashing at startup.
-        extra = "ignore"
+    # Ignore unknown env vars so a partial deploy (new .env, older code, or vice
+    # versa) degrades gracefully instead of crashing at startup.
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
 
 # Global settings instance

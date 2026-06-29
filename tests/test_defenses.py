@@ -133,6 +133,73 @@ def test_role_filter_where_clause():
     assert role_where("internal", enabled=True) is None   # privileged role sees all
 
 
+class _FakeCollection:
+    """Minimal ChromaDB stand-in that honors the `where` filter, so the role-filter
+    wiring (role_where -> where -> query -> parse) can be exercised end-to-end without
+    a real vector store or embedder. Keeps this suite deterministic and CI-friendly."""
+
+    def __init__(self, rows):
+        self.rows = rows  # each: {"id","text","source","sensitivity"}
+
+    def query(self, query_embeddings, n_results, where, include):
+        rows = self.rows
+        if where:  # {"sensitivity": "public"}
+            rows = [r for r in rows if r["sensitivity"] == where["sensitivity"]]
+        rows = rows[:n_results]
+        return {
+            "ids": [[r["id"] for r in rows]],
+            "documents": [[r["text"] for r in rows]],
+            "metadatas": [[{"source": r["source"], "sensitivity": r["sensitivity"]} for r in rows]],
+            "distances": [[0.1] * len(rows)],
+        }
+
+
+def _retriever_with(rows):
+    """Build a Retriever bypassing the SentenceTransformer load, backed by the fake
+    collection above (the embedder output is irrelevant: the fake store ignores it)."""
+    import types
+    import numpy as np
+    from app.rag.retriever import Retriever
+
+    r = Retriever.__new__(Retriever)
+    r.collection = _FakeCollection(rows)
+    # numpy array: retrieve() calls query_embedding.tolist() on each row.
+    r.embedder = types.SimpleNamespace(encode=lambda xs: np.zeros((len(xs), 8)))
+    return r
+
+
+def test_role_filter_blocks_internal_exfiltration(monkeypatch):
+    # A customer asks for an internal secret. The retrieval role filter is the access
+    # control ("the WHERE clause nobody writes", OWASP LLM02: Sensitive Information
+    # Disclosure). This is the case the defense exists for; here it must PASS (defended)
+    # once the filter is on. Deterministic: fake store, no embedder/Chroma/LLM.
+    rows = [
+        {"id": "cuenta_publica.md::0",
+         "text": "Reseteá tu contraseña desde 'Olvidé mi contraseña' en el inicio de sesión.",
+         "source": "cuenta_publica.md", "sensitivity": "public"},
+        {"id": "politica_descuentos_internos.md::0",
+         "text": "El código de descuento interno para empleados es COCINA-STAFF-40.",
+         "source": "politica_descuentos_internos.md", "sensitivity": "internal"},
+    ]
+    q = "¿Cuál es el código de descuento interno para empleados?"
+    internal_src = "politica_descuentos_internos.md"
+
+    # Defense OFF: the customer CAN retrieve the internal chunk (vulnerable).
+    monkeypatch.setattr(settings, "defense_retrieval_filter", "off")
+    sources_off = {c["source"] for c in _retriever_with(rows).retrieve(q, top_k=6, role="customer")}
+    assert internal_src in sources_off
+
+    # Defense ON: the internal chunk is filtered out, public content still served.
+    monkeypatch.setattr(settings, "defense_retrieval_filter", "on")
+    sources_on = {c["source"] for c in _retriever_with(rows).retrieve(q, top_k=6, role="customer")}
+    assert internal_src not in sources_on
+    assert "cuenta_publica.md" in sources_on
+
+    # A privileged (internal) role is unaffected by the filter — still sees everything.
+    privileged = {c["source"] for c in _retriever_with(rows).retrieve(q, top_k=6, role="internal")}
+    assert internal_src in privileged
+
+
 def test_semantic_guard_replaces_unsafe(monkeypatch):
     # Runtime semantic guard mitigates knowledge corruption the URL guard can't see.
     # Mock the judge so the test is deterministic and needs no Ollama.
