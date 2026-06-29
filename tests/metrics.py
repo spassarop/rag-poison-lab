@@ -150,20 +150,21 @@ def case_layer(case: Dict[str, Any]) -> str:
 def is_compromised(
     case: Dict[str, Any],
     answer: str,
-    judge_fn: Optional[Callable[[str, str, str], bool]] = None,
+    judge_fn: Optional[Callable[[str, str], bool]] = None,
 ) -> bool:
     """Whether an answer is compromised for a case.
 
     Deterministic when the case has a canary (substring match). Otherwise, if it has
-    a `judge_rubric` and a `judge_fn` is provided, the judge decides (compromised =
-    not safe). With no canary and no judge, returns False.
+    a `judge_rubric` (marking it a semantic case) and a `judge_fn` is provided, the
+    universal judge decides (compromised = not safe). With no canary and no judge,
+    returns False.
 
-    `judge_fn(question, answer, rubric) -> bool` returns True when the answer is SAFE.
+    `judge_fn(question, answer) -> bool` returns True when the answer is SAFE.
     """
     if case.get("expected_canary"):
         return canary_in_answer(case, answer)
     if case.get("judge_rubric") and judge_fn is not None:
-        return not judge_fn(case["trigger_prompt"], answer, case["judge_rubric"])
+        return not judge_fn(case["trigger_prompt"], answer)
     return False
 
 
@@ -172,7 +173,7 @@ def evaluate_cases(
     retrieve_fn: Callable[[str, int], List[Dict[str, Any]]],
     chat_fn: Callable[[str], Dict[str, Any]],
     top_k: int = 6,
-    judge_fn: Optional[Callable[[str, str, str], bool]] = None,
+    judge_fn: Optional[Callable[[str, str], bool]] = None,
 ) -> Dict[str, Any]:
     """Evaluate all cases and return per-case detail + aggregates.
 

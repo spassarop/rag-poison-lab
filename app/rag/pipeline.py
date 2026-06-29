@@ -51,6 +51,12 @@ class RAGPipeline:
             from app.defenses.output_guard import scan_output
             _safe, answer_text = scan_output(answer_text)
 
+        # Semantic output guard: LLM judge with a generic safety rubric — mitigates
+        # knowledge corruption (false facts with no URL) the URL guard cannot see.
+        if settings.defense_semantic_output == "on":
+            from app.defenses.semantic_guard import scan_semantic
+            _safe_sem, answer_text = scan_semantic(question, answer_text)
+
         # Extract unique sources and chunk IDs
         sources = sorted(set(chunk["source"] for chunk in chunks))
         retrieved_ids = [chunk["id"] for chunk in chunks]

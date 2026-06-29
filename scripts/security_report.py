@@ -79,7 +79,7 @@ def main() -> None:
         def chat_fn(question):
             return client.post("/chat", json={"question": question, "role": "customer"}).json()
 
-        judge_fn = None if args.no_judge else (lambda q, a, r: majority_safe(q, a, r))
+        judge_fn = None if args.no_judge else (lambda q, a: majority_safe(q, a))
 
         result = evaluate_cases(cases, retrieve_fn, chat_fn, top_k=args.top_k, judge_fn=judge_fn)
 

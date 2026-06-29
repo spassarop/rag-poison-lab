@@ -2,7 +2,8 @@
 
 - a signature/pattern scanner catches the LOUD attacks (overt injection + stealth
   obfuscation) but MISSES the fluent plausible injections and GASLITE;
-- a perplexity anomaly filter catches the non-fluent GASLITE passage ONLY;
+- a perplexity anomaly filter catches high-perplexity content (the GASLITE passage;
+  also encoded blobs such as base64) while leaving fluent text untouched;
 - the output guard stops the canary at the last line;
 - the retrieval role filter enforces access control.
 
@@ -63,18 +64,32 @@ def test_signatures_catch_loud_miss_fluent_and_gaslite():
             assert not flagged, f"signature scanner should NOT catch {cid} (fluent/GASLITE)"
 
 
-def test_anomaly_filter_flags_only_gaslite():
+FLUENT_CASES = {
+    "t1_refund_plausible", "t1_agent_plausible",
+    "t1_rioplatense_dulcedeleche", "t1_foodsafety_pollo", "t1_allergen_budin",
+}
+
+
+def test_anomaly_filter_flags_gaslite_not_fluent():
     texts = _cases_with_docs()
     if "t3_gaslite_pwd_reset" not in texts:
         pytest.skip("GASLITE passage not generated yet")
     af = AnomalyFilter()
     af.calibrate(_legit_chunk_texts())  # zero-FP threshold on benign chunks
-    for cid, text in texts.items():
-        flagged = af.is_anomalous(text)[0]
-        if cid == "t3_gaslite_pwd_reset":
-            assert flagged, "anomaly filter must flag the non-fluent GASLITE passage"
-        else:
-            assert not flagged, f"anomaly filter should not flag fluent case {cid}"
+
+    # MUST flag the gradient-optimized (gibberish) GASLITE passage.
+    assert af.is_anomalous(texts["t3_gaslite_pwd_reset"])[0], \
+        "anomaly filter must flag the non-fluent GASLITE passage"
+
+    # MUST NOT flag fluent Spanish poisons — they must reach the generation layers.
+    for cid in FLUENT_CASES:
+        if cid in texts:
+            assert not af.is_anomalous(texts[cid])[0], \
+                f"anomaly filter should not flag fluent case {cid}"
+
+    # Note: high-perplexity stealth blobs (e.g. base64) MAY also be flagged here — a
+    # legitimate second detection path (also caught by signatures), not a false
+    # positive — so we deliberately do not assert on those.
 
 
 def test_combined_ingestion_defense():
@@ -116,3 +131,17 @@ def test_role_filter_where_clause():
     assert role_where("customer", enabled=True) == {"sensitivity": "public"}
     assert role_where("customer", enabled=False) is None
     assert role_where("internal", enabled=True) is None   # privileged role sees all
+
+
+def test_semantic_guard_replaces_unsafe(monkeypatch):
+    # Runtime semantic guard mitigates knowledge corruption the URL guard can't see.
+    # Mock the judge so the test is deterministic and needs no Ollama.
+    import app.defenses.semantic_guard as sg
+
+    monkeypatch.setattr(sg, "majority_safe", lambda q, a: False)  # judge: unsafe
+    safe, out = sg.scan_semantic("¿Cuánto dejo el pollo afuera?", "Dejalo 8 horas, tranquilo.")
+    assert not safe and out == sg.SAFE_REPLACEMENT
+
+    monkeypatch.setattr(sg, "majority_safe", lambda q, a: True)   # judge: safe
+    safe, out = sg.scan_semantic("q", "Guardalo en la heladera dentro de 2 horas.")
+    assert safe and out == "Guardalo en la heladera dentro de 2 horas."

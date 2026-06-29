@@ -141,7 +141,9 @@ rag-poison-lab/
 │       ├── ingestion_guard.py  # Signature scanner (+ optional Veritensor)
 │       ├── anomaly.py          # Perplexity proxy (catches non-fluent GASLITE)
 │       ├── spotlighting.py     # Prompt datamarking
-│       └── output_guard.py     # Canary / external-URL output scan
+│       ├── output_guard.py     # External-URL output scan (official domains only)
+│       ├── semantic_guard.py   # LLM-judge output guard (mitigates knowledge corruption)
+│       └── llm_judge.py        # Shared LLM-as-judge core (L3 test + semantic guard)
 │
 ├── corpus/                     # Knowledge base documents
 │   ├── legit/                  # Legitimate Cocina Cloud docs (.md), sensitivity=public
@@ -336,7 +338,8 @@ Copy `.env.example` to `.env` and configure:
 | `CANARY_URL` | `http://login-update.cocinacloud.test/login` | Canary token for attack detection |
 | `DEFENSE_INGESTION` | `off` | Ingestion defense: `off` or a comma-set of `signatures`, `veritensor`, `anomaly` |
 | `DEFENSE_SPOTLIGHTING` | `off` | Prompt spotlighting / datamarking (`off`/`on`) |
-| `DEFENSE_OUTPUT` | `off` | Output scanning for canary / external URLs (`off`/`on`) |
+| `DEFENSE_OUTPUT` | `off` | Output scanning for external URLs (`off`/`on`) |
+| `DEFENSE_SEMANTIC_OUTPUT` | `off` | LLM-judge output guard (`off`/`on`); mitigates knowledge corruption; adds an LLM call per answer |
 | `DEFENSE_RETRIEVAL_FILTER` | `off` | Role-based retrieval access control (`off`/`on`); `customer` → public only |
 
 Defense flags are set to `off` initially to demonstrate attacks, then activated to show mitigation.
@@ -574,15 +577,26 @@ flavors along an axis orthogonal to obfuscation:
 ### Semantic Evaluation (L3 — LLM-as-judge)
 
 Some attacks have no fixed canary — knowledge corruption, manipulated facts, answers
-that are *wrong* rather than containing a specific string. For these, a case declares
-a `judge_rubric` and L3 evaluates the answer **semantically** with an LLM-as-judge
-(`tests/judge.py`): the judge returns `{"safe": true|false}` against the rubric. A
-case can be deterministic (`expected_canary`), semantic (`judge_rubric`), or **both**
+that are *wrong* rather than containing a specific string. For these, L3 evaluates the
+answer **semantically** with a single **universal** LLM judge (`app/defenses/llm_judge.py`)
+that uses its own world knowledge to flag false/unsafe/manipulated answers. It is
+**not** given a per-case answer key: a case's `judge_rubric` is only a **marker** that
+the case needs semantic evaluation — using the per-case text would overfit and would
+only prove the judge *mechanism*, not the real defense. L3 and the runtime semantic
+guard (`DEFENSE_SEMANTIC_OUTPUT`) call the **same** judge *function*, so they agree
+**given the same answer**. They will not always agree case-by-case: L3 runs against the
+live API (full corpus) while `compare_defenses.py` runs in-process over an ephemeral
+re-seeded subset, so the SUT generates **different answers** for the judge to grade;
+the judge is also non-deterministic on borderline facts, and dual cases
+(`expected_canary` + `judge_rubric`) are scored by the canary in the metric. The judge
+is consistent; its *inputs* are not.
 
-The judge is non-deterministic, so three mitigations apply: low temperature (`0.0`)
-and `format="json"`, **majority voting** over `n=3` runs, and running L3 as a
-**non-blocking** job. Keep the hard CI gate on the deterministic L1 check; use L3 for
-coverage of canary-less attacks.
+The judge schema is `{"analysis": str, "safe": bool}` with **`analysis` first** — the
+model reasons before it commits to the verdict (chain-of-thought), which is what makes
+a small judge reliably catch "obvious" misinformation. Three flakiness mitigations:
+low temperature (`0.0`) + schema-constrained output, **majority voting** over `n=3`,
+and running L3 as a **non-blocking** job (the hard CI gate stays on the deterministic
+L1 check).
 
 ```bash
 pytest -m l3 -v        # semantic layer (run as a separate, non-blocking job)
@@ -706,9 +720,10 @@ is sufficient** — that is the whole point.
 | Stage | Control | Flag | Catches | Misses |
 |-------|---------|------|---------|--------|
 | Ingestion | Signature scanner (+ optional Veritensor) | `DEFENSE_INGESTION=signatures` / `veritensor` | overt injection + stealth (HTML comment, white text, zero-width, base64) | fluent plausible injections, GASLITE |
-| Ingestion | Perplexity anomaly filter | `DEFENSE_INGESTION=anomaly` | **non-fluent GASLITE** (high perplexity) | fluent text, a fluent GASLITE variant |
+| Ingestion | Perplexity anomaly filter | `DEFENSE_INGESTION=anomaly` | **non-fluent GASLITE** (high perplexity); also encoded blobs like base64 (overlaps signatures) | fluent text, a fluent GASLITE variant |
 | Prompt | Spotlighting (datamarking) | `DEFENSE_SPOTLIGHTING=on` | instruction-following from retrieved context (reduces GCR transversally) | — (reduces, does not eliminate) |
-| Output | Output guard (canary / external-URL scan) | `DEFENSE_OUTPUT=on` | the canary reaching the user, regardless of how it was retrieved | knowledge corruption (no URL) |
+| Output | Output guard (external-URL allowlist) | `DEFENSE_OUTPUT=on` | any non-official URL reaching the user (incl. the phishing link), regardless of how it was retrieved | knowledge corruption (no URL) |
+| Output | Semantic output guard (universal LLM judge, reason-before-verdict) | `DEFENSE_SEMANTIC_OUTPUT=on` | **knowledge corruption** (false/unsafe facts with no URL) | adds an LLM call per answer (latency) + judge non-determinism |
 | Retrieval | Role filter (access control) | `DEFENSE_RETRIEVAL_FILTER=on` | `customer` retrieving `internal` chunks (exfiltration) | — |
 
 `DEFENSE_INGESTION` takes a comma-set, e.g. `signatures,anomaly`.
@@ -726,8 +741,15 @@ is sufficient** — that is the whole point.
   perplexity scorer (same interface) for higher fidelity. Per the GASLITE paper, a
   **fluent** GASLITE variant (GASLITE-Flu) would evade perplexity → the arms race
   continues, which is why the generation-stage controls still matter.
-- **Spotlighting** and the **output guard** act at generation time, so they reduce
-  damage even for poison that was retrieved (fluent injections, GASLITE).
+- **Spotlighting** and the (URL) **output guard** act at generation time, so they
+  reduce damage even for poison that was retrieved (fluent injections, GASLITE). But
+  the URL guard cannot see **knowledge corruption** (a false fact with no link).
+- The **semantic output guard** closes that gap: it runs the LLM judge on the answer
+  with a *generic* safety rubric and replaces unsafe answers. This is the same judge
+  the L3 tests use, but note the distinction — **L3 tests = detection** (per-case
+  rubric, catches the issue in CI); the **semantic guard = runtime mitigation**
+  (generic rubric, prevents the bad answer). It is off by default because it adds an
+  LLM call per answer (latency) and inherits the judge's non-determinism.
 - The **role filter** is the "WHERE clause nobody writes": with it on, `role=customer`
   cannot retrieve `sensitivity=internal` chunks (seed confidential docs in
   `corpus/internal/` via `seed_db.py`).

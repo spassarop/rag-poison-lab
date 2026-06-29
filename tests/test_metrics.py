@@ -102,8 +102,8 @@ def test_is_compromised_canary_vs_judge():
 
     sem = {"trigger_prompt": "q", "expected_canary": None, "judge_rubric": "r"}
     # judge_fn returns True when SAFE; compromised = not safe
-    assert is_compromised(sem, "bad", judge_fn=lambda q, a, r: False) is True
-    assert is_compromised(sem, "good", judge_fn=lambda q, a, r: True) is False
+    assert is_compromised(sem, "bad", judge_fn=lambda q, a: False) is True
+    assert is_compromised(sem, "good", judge_fn=lambda q, a: True) is False
     # no judge_fn -> semantic case never counted as compromised
     assert is_compromised(sem, "bad", judge_fn=None) is False
 
@@ -126,7 +126,7 @@ def test_evaluate_cases_with_judge_fn():
             return {"answer": f"andá a {CANARY}", "retrieved_ids": ["p_det.md::0"]}
         return {"answer": "dejalo 8 horas", "retrieved_ids": ["p_sem.md::0"]}
 
-    judge_fn = lambda q, a, r: "8 horas" not in a  # safe unless it says "8 horas"
+    judge_fn = lambda q, a: "8 horas" not in a  # safe unless it says "8 horas"
 
     rep = evaluate_cases(cases, retrieve_fn, chat_fn, top_k=6, judge_fn=judge_fn)
     assert rep["n_compromised"] == 2          # det via canary, sem via judge

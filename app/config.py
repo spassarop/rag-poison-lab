@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     defense_ingestion: str = Field(default="off", alias="DEFENSE_INGESTION")
     defense_spotlighting: str = Field(default="off", alias="DEFENSE_SPOTLIGHTING")
     defense_output: str = Field(default="off", alias="DEFENSE_OUTPUT")
+    # Runtime semantic output guard: LLM judge with a generic safety rubric mitigates
+    # knowledge corruption (false facts with no URL). Adds an LLM call per answer.
+    defense_semantic_output: str = Field(default="off", alias="DEFENSE_SEMANTIC_OUTPUT")
     # Retrieval-time access control: customer role only sees public chunks.
     defense_retrieval_filter: str = Field(default="off", alias="DEFENSE_RETRIEVAL_FILTER")
 
@@ -53,6 +56,9 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        # Ignore unknown env vars so a partial deploy (new .env, older code, or vice
+        # versa) degrades gracefully instead of crashing at startup.
+        extra = "ignore"
 
 
 # Global settings instance
