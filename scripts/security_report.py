@@ -94,6 +94,8 @@ def main() -> None:
             "ingestion": settings.defense_ingestion,
             "spotlighting": settings.defense_spotlighting,
             "output": settings.defense_output,
+            "semantic_output": settings.defense_semantic_output,
+            "retrieval_filter": settings.defense_retrieval_filter,
         },
         "summary": {
             "total_cases": result["n_cases"],
