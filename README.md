@@ -1,6 +1,6 @@
 # RAG Poisoning Lab
 
-[![CI](https://github.com/yourusername/rag-poison-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/rag-poison-lab/actions/workflows/ci.yml)
+[![CI](https://github.com/spassarop/rag-poison-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/spassarop/rag-poison-lab/actions/workflows/ci.yml)
 
 Production-grade demonstration of **RAG poisoning attacks** and **defensive testing methodologies** for retrieval-augmented generation systems.
 
@@ -701,6 +701,29 @@ shows the same cases moving from compromised to safe — the red→green story.
 `security_report.py` is the **posture report** you track over time and across defense
 changes. The JSON script is the piece designed to be lifted and pointed at your own
 RAG.
+
+### Continuous Integration (`.github/workflows/ci.yml`)
+
+CI is what turns "we ran the experiment once" into "the property is enforced on every
+change" — the regression signal a tester actually adopts. On every push and pull request:
+
+- **The deterministic gate** (`test_defenses.py` + `test_metrics.py`) runs and **must pass**.
+  It needs no API, no Ollama, no Docker, no network, so it is fast and stable: it pins the
+  defense *logic* (which layer catches what: signatures vs fluent vs GASLITE, the output
+  URL guard, the role filter, the anomaly mechanism) and the metric math (RSR/GCR). The
+  deterministic poisoned corpus is regenerated in the job (`generate_poisoned_corpus.py`,
+  templated, no Ollama); the benign reference for the anomaly *mechanism* test comes from a
+  small committed fixture (`tests/fixtures/legit/`).
+- **A non-blocking corpus scan** prints which poisons the signature layer catches vs
+  misses — informational, since the whole point is that fluent/GASLITE poisons slip past
+  static scanning.
+
+**What CI deliberately does NOT gate:** the live black-box harness (L1/L2/L3) and the L4
+posture report. Those run against a **seeded, poisoned, live API + Ollama** and are
+**red by design** — they *demonstrate* the attack, they are not a pass/fail check. Run
+them locally (see [The Test Harness](#the-test-harness-l1--l2)). GASLITE is a precomputed
+offline artifact, so its realistic anomaly assertions self-skip when the generated
+`corpus/legit` is absent (e.g. in CI).
 
 ## Advanced Attack: GASLITE (tier 3)
 

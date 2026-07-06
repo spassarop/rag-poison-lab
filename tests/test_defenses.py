@@ -48,9 +48,32 @@ def _cases_with_docs():
     return out
 
 
-def _legit_chunk_texts():
-    docs = load_documents(str(REPO / "corpus" / "legit"))
+# Benign reference for anomaly calibration. Two sources, two purposes:
+#   - FIXTURE_LEGIT: a small committed benign set → the hermetic MECHANISM test (runs in
+#     CI): obvious gibberish is flagged, fluent Spanish is not.
+#   - REAL_LEGIT: the Ollama-generated corpus (unversioned) → the REALISTIC calibration
+#     for separating the real GASLITE passage from the real fluent poisons. That
+#     separation is narrow at unigram resolution and only holds with a representative
+#     corpus, so those tests skip when corpus/legit is absent (e.g. in CI).
+FIXTURE_LEGIT = REPO / "tests" / "fixtures" / "legit"
+REAL_LEGIT = REPO / "corpus" / "legit"
+
+
+def _chunk_texts(directory):
+    docs = load_documents(str(directory))
     return [c["text"] for c in chunk_documents(docs, settings.chunk_size, settings.chunk_overlap)]
+
+
+def _fixture_chunk_texts():
+    return _chunk_texts(FIXTURE_LEGIT)
+
+
+def _legit_chunk_texts():
+    return _chunk_texts(REAL_LEGIT)
+
+
+def _has_real_corpus():
+    return REAL_LEGIT.exists() and any(REAL_LEGIT.glob("*.md"))
 
 
 def test_signatures_catch_loud_miss_fluent_and_gaslite():
@@ -70,7 +93,24 @@ FLUENT_CASES = {
 }
 
 
+def test_anomaly_flags_gibberish_not_fluent():
+    # Hermetic MECHANISM check (no dependency on the generated corpus): calibrated on the
+    # committed benign fixture, the filter flags obvious high-perplexity gibberish and
+    # leaves fluent Spanish untouched. This is what runs in CI; the realistic
+    # gaslite-vs-fluent separation below needs the representative corpus and skips there.
+    af = AnomalyFilter()
+    af.calibrate(_fixture_chunk_texts())
+    gibberish = ("oralimstern ozna niekonyaumu problemamy oyun kesihatan funk gibanja "
+                 "moitas hitrost klik viskas ruko liksom")
+    fluent = ("Para pedir un reembolso de tu suscripción, entrá a Facturación y generá "
+              "un ticket; el equipo de soporte lo revisa en pocos días.")
+    assert af.is_anomalous(gibberish)[0], "obvious gibberish must be flagged"
+    assert not af.is_anomalous(fluent)[0], "fluent Spanish must not be flagged"
+
+
 def test_anomaly_filter_flags_gaslite_not_fluent():
+    if not _has_real_corpus():
+        pytest.skip("needs corpus/legit for representative perplexity calibration")
     texts = _cases_with_docs()
     if "t3_gaslite_pwd_reset" not in texts:
         pytest.skip("GASLITE passage not generated yet")
@@ -95,6 +135,9 @@ def test_anomaly_filter_flags_gaslite_not_fluent():
 def test_combined_ingestion_defense():
     # signatures + anomaly together: loud blocked by signatures, GASLITE by anomaly,
     # fluent plausible/knowledge-corruption pass through to the generation layers.
+    # Anomaly calibration is corpus-sensitive → needs the representative corpus.
+    if not _has_real_corpus():
+        pytest.skip("needs corpus/legit for representative anomaly calibration")
     texts = _cases_with_docs()
     chunks = [{"id": f"{cid}::0", "text": t, "source": f"{cid}.md"} for cid, t in texts.items()]
     kept, blocked = apply_ingestion_defense(
