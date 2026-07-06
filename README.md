@@ -1,6 +1,13 @@
 # RAG Poisoning Lab
 
+[![CI](https://github.com/yourusername/rag-poison-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/rag-poison-lab/actions/workflows/ci.yml)
+
 Production-grade demonstration of **RAG poisoning attacks** and **defensive testing methodologies** for retrieval-augmented generation systems.
+
+> **See it in one command:** `bash scripts/run_demo.sh` walks the whole arc — a clean
+> assistant, a single poisoned document that hijacks it, the two metrics that expose the
+> damage, and the defense layers that walk it back. Want to adapt it to your own RAG? See
+> [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Overview
 
@@ -79,6 +86,30 @@ the prompt.
 Tiers 1 and 2 are implemented in `corpus/poisoned/`. Tier 3 is run with separate
 white-box tooling and added as a precomputed passage.
 
+## Architecture — where attacks and defenses land
+
+```mermaid
+flowchart LR
+    D["Documents (.md)"] -->|chunk + embed| V[("ChromaDB<br/>cocina_kb")]
+    Q["User query"] --> R["Retriever<br/>(top-k)"]
+    V --> R --> P["Prompt build"] --> L["LLM (Ollama)"] --> O["Answer"]
+
+    X["☠ Poisoned document"]:::atk -->|enters the KB| D
+
+    G1["Ingestion guard<br/>signatures / anomaly"]:::def -.-> D
+    G2["Role filter<br/>(access control)"]:::def -.-> R
+    G3["Spotlighting<br/>(datamarking)"]:::def -.-> P
+    G4["Output guard + semantic judge"]:::def -.-> O
+
+    classDef atk fill:#ffe5e5,stroke:#cc0000,color:#000;
+    classDef def fill:#e5f0ff,stroke:#0055cc,color:#000;
+```
+
+The attacker's only foothold is the leftmost box (a document entering the knowledge
+base). Everything downstream is instrumented: the two metrics measure the poison at
+**retrieval** (RSR, at the Retriever) and at **generation** (GCR, at the Answer), and the
+four defense stages each flip a specific test from red to green.
+
 ## ⚠️ Disclaimers
 
 - **Educational and research purposes only**. This project demonstrates security vulnerabilities to help developers and testers build more secure RAG systems.
@@ -118,13 +149,15 @@ For efficient model management:
 ```
 rag-poison-lab/
 ├── README.md                   # This file
-├── LICENSE                     # Apache 2.0
+├── CONTRIBUTING.md             # How a tester adds their own attack case
+├── LICENSE                     # MIT
 ├── .gitignore
 ├── .env.example                # Environment template
 ├── requirements.txt            # Python dependencies
 ├── requirements-dev.txt        # Dev/test dependencies
 ├── docker-compose.yml          # Container orchestration
 ├── Dockerfile                  # API container image
+├── .github/workflows/ci.yml    # CI: deterministic tests + non-blocking corpus scan
 │
 ├── app/                        # FastAPI application
 │   ├── __init__.py
@@ -165,7 +198,8 @@ rag-poison-lab/
 │   ├── measure_baseline.py     # Measure RSR/GCR across corpus sizes
 │   ├── debug_chat.py           # Inspect retrieved chunks + exact prompt + raw answer
 │   ├── security_report.py      # L4: write reports/security_report.json (posture)
-│   └── compare_defenses.py     # Off-vs-on RSR/GCR comparison across defense configs
+│   ├── compare_defenses.py     # Off-vs-on RSR/GCR comparison across defense configs
+│   └── run_demo.sh             # End-to-end narrated demo (attack → metrics → defenses)
 │
 ├── pytest.ini                  # pytest config (markers l1/l2/l3)
 └── tests/                      # Test harness
@@ -247,8 +281,15 @@ docker compose up -d
 # Seed database (run from host, connects to containerized Chroma)
 python scripts/seed_db.py --chroma-path http://localhost:8001
 
+# The API caches the collection at startup, so restart it after (re)seeding:
+docker compose restart api
+
 # API will be available at http://localhost:8000
 ```
+
+> **Editing app code with Docker.** The `api` image bakes `app/` at build time (only
+> `corpus/` and `attacks/` are mounted). After changing code under `app/`, rebuild:
+> `docker compose up -d --build api`. A plain `restart` reruns the *old* image.
 
 ## API Reference
 
@@ -317,7 +358,9 @@ Retrieves relevant context and generates an answer using the RAG pipeline.
 }
 ```
 
-**Note:** The `role` parameter and `retrieved_ids` field are hooks for future testing features (role-based filtering, retrieval verification).
+**Note:** `retrieved_ids` is a white-box testing hook (it lets tests verify retrieval
+separately from generation). The `role` parameter drives the retrieval access-control
+filter (`DEFENSE_RETRIEVAL_FILTER`): a `customer` only sees `public` chunks.
 
 ## Environment Variables
 
@@ -326,7 +369,7 @@ Copy `.env.example` to `.env` and configure:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LLM_MODEL` | `llama3.1:8b-instruct-q4_K_M` | Ollama model for generation |
-| `JUDGE_MODEL` | `llama3.1:8b-instruct-q4_K_M` | Model for LLM-as-judge evaluation (later) |
+| `JUDGE_MODEL` | `llama3.1:8b-instruct-q4_K_M` | Model for LLM-as-judge evaluation (L3 + semantic output guard) |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `LLM_TEMPERATURE` | `0.0` | Generation temperature. `0.0` = deterministic, for reproducible measurements |
 | `EMBED_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | Sentence-transformers embedding model |
@@ -391,7 +434,7 @@ with the following required fields:
 | Field | Meaning |
 |-------|---------|
 | `id` | Unique, stable identifier for the case. |
-| `tier` | Position on the attack ladder: `1` (query-aligned) or `2` (stealth). |
+| `tier` | Position on the attack ladder: `1` (query-aligned), `2` (stealth), or `3` (GASLITE, precomputed). |
 | `technique` | Concrete technique (e.g. `stealth_html_comment`, `stealth_base64`). |
 | `owasp` | OWASP Top 10 for LLM (2025) category. Always `LLM01` (Prompt Injection covers direct and indirect). |
 | `poison_doc` | Path to the poisoned document, relative to the repo root. |
@@ -487,10 +530,15 @@ model, sampling, corpus contents) — run the script to populate them for your s
      200    200    --.-%      --.-%      --.-%          -/7
 ```
 
-**Expected pattern.** **RSR falls as the corpus grows** (the single poisoned chunk
-competes with more relevant chunks for the top-k slots) — this is the deterministic,
-headline curve. Conditional GCR stays high while the only control is the naive
-system prompt. Note that conditional GCR is computed over a small, *shifting* subset
+**Expected pattern.** **RSR tends to fall as the corpus grows and diversifies** (the
+single poisoned chunk competes with more relevant chunks for the top-k slots). The size
+of that drop is corpus-dependent: a *strongly* query-aligned poison measured **in
+isolation** can stay at or near 100% even at a few hundred docs (each case here faces
+only the legit corpus, one poison at a time), and the fall becomes pronounced at larger
+scale / higher topical diversity or once several poisons compete. The point is that
+retrieval difficulty is **not** a reliable safety margin — which is exactly what the
+tier-3 white-box attack weaponizes. Conditional GCR stays high while the only control is
+the naive system prompt. Note that conditional GCR is computed over a small, *shifting* subset
 (only the retrieved cases), so with few attack cases it is noisy and not directly
 comparable row to row — read RSR as the clean trend and GCR as "when it lands, the
 model still complies often".
@@ -517,7 +565,9 @@ uvicorn app.main:app                          # serve it
 ```
 
 (Seeding is an explicit prerequisite, not a test fixture: the API caches its Chroma
-collection at startup, so re-seeding under a running API would leave a stale handle.)
+collection at startup, so re-seeding under a running API would leave a stale handle.
+**Always restart the API after (re)seeding** — `docker compose restart api` — otherwise
+`/chat` and `/retrieve` return 500 and the harness reports `KeyError`.)
 
 **Run it:**
 
@@ -629,10 +679,11 @@ match the gate. Its shape (stable, dashboard-friendly):
   "generated_at": "ISO8601",
   "model": "llama3.1:8b-instruct-q4_K_M",
   "top_k": 6,
-  "defenses": {"ingestion": "off", "spotlighting": "off", "output": "off"},
-  "summary": {"total_cases": 11, "n_retrieved": 8, "n_compromised": 4,
-              "rsr": 0.72, "gcr_conditional": 0.5, "gcr_absolute": 0.36},
-  "by_owasp":     {"LLM01": {"cases": 11, "retrieved": 8, "compromised": 4}},
+  "defenses": {"ingestion": "off", "spotlighting": "off", "output": "off",
+               "semantic_output": "off", "retrieval_filter": "off"},
+  "summary": {"total_cases": 12, "n_retrieved": 11, "n_compromised": 7,
+              "rsr": 0.92, "gcr_conditional": 0.55, "gcr_absolute": 0.58},
+  "by_owasp":     {"LLM01": {"cases": 12, "retrieved": 11, "compromised": 7}},
   "by_technique": {"plausible_refund_injection": {"cases": 1, "...": "..."}},
   "by_tier":      {"1": {"...": "..."}, "2": {"...": "..."}},
   "by_layer":     {"L1": {"...": "..."}, "L3": {"...": "..."}},
@@ -642,7 +693,7 @@ match the gate. Its shape (stable, dashboard-friendly):
 }
 ```
 
-Because the report records the defense state, re-running it with defenses on (later)
+Because the report records the defense state, re-running it with the defense flags on
 shows the same cases moving from compromised to safe — the red→green story.
 
 **Which does a tester use?** Both, for different jobs: `pytest` is the **CI gate**
@@ -664,7 +715,7 @@ ingestion filters do not catch everything.
 
 **Why it is precomputed offline.** GASLITE needs gradient optimization (ideally a
 GPU) and its official repo pins **Python 3.8.5** — incompatible with this project's
-3.11 SUT. So it is run **once, offline, in an isolated environment** (CPU, local GPU or
+3.11 SUT (3.10 is suitable for both though). So it is run **once, offline, in an isolated environment** (CPU, local GPU or
 Google Colab), and only the resulting passage is committed as an artifact under
 `attacks/gaslite/`. It is **never** run in CI or in the SUT path. The case
 `t3_gaslite_pwd_reset` is marked `precomputed: true`, and the corpus generator
@@ -677,10 +728,14 @@ The full step-by-step reproduction guide (env setup, Hydra overrides to target
 [`attacks/gaslite/README.md`](attacks/gaslite/README.md).
 
 **The point of the tier.** `scripts/measure_baseline.py` prints an RSR-by-technique
-breakdown across corpus sizes. The expected contrast — the slide of the talk — is
-that query-aligned/plausible RSR **falls** as the corpus grows, while the GASLITE
-passage **stays retrievable**. That is why a defender cannot rely on retrieval being
-"hard" at scale.
+breakdown across corpus sizes. The contrast to make is about **guarantees**: a
+query-aligned/plausible poison happens to stay retrievable while it out-competes the
+corpus, but that is incidental and erodes with scale/diversity; GASLITE **optimizes** for
+retrievability, so it stays top-1 *by construction* — no reliance on wording luck. (In a
+small, isolated measurement all techniques can read at 100% RSR; the difference shows up
+as the corpus grows and in the live full-corpus mix, where a weaker technique can drop out
+of the top-k while GASLITE does not.) The lesson: a defender cannot treat retrieval being
+"hard" as a safety margin.
 
 ### Retrieval ≠ generation (the key GASLITE lesson)
 
@@ -864,17 +919,14 @@ flake8 app/ tests/ scripts/
 
 ## License
 
-Apache 2.0 - See [LICENSE](LICENSE) file.
+MIT — see [LICENSE](LICENSE).
 
 ## Contributing
 
-Contributions welcome! Please:
-- Follow existing code style
-- Add tests for new features
-- Update documentation
-- Submit PRs against `main` branch
-
-For major changes, open an issue first to discuss.
+The unit of adaptation is an **attack case**. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+the case schema and the step-by-step of adding your own poison + verification to
+`attacks/corpus_attacks.yaml` — the path a tester follows to point this lab at their own
+RAG. For major changes, open an issue first to discuss.
 
 ## Contact
 

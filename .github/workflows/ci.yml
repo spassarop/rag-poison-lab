@@ -1,0 +1,64 @@
+name: CI
+
+# Gate = the DETERMINISTIC tests only. test_defenses.py and test_metrics.py run at the
+# function level: no live API, no Ollama, no Docker, no network — so they are stable in CI.
+#
+# The black-box harness (L1 canary, L2 corpus, L3 judge) and the L4 posture report run
+# against a live, seeded API + Ollama and are RED BY DESIGN when poison is present. They
+# demonstrate the attack; they are NOT a pass/fail gate. Run them locally:
+#   python scripts/seed_db.py --with-poison && docker compose up -d api
+#   pytest -m l1 ; pytest -m l2 ; pytest -m l3
+#   python scripts/security_report.py
+# GASLITE (tier 3) is precomputed offline and never regenerated in CI.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  deterministic-tests:
+    name: Deterministic tests (defenses + metrics)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run deterministic test suite
+        run: pytest tests/test_defenses.py tests/test_metrics.py -v
+
+  corpus-scan:
+    name: Ingestion signature scan (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true   # informational: the demo hinges on scans MISSING fluent/GASLITE
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: Scan the poisoned corpus with the signature layer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from app.defenses.ingestion_guard import SignatureScanner
+          s = SignatureScanner()
+          flagged, clean = [], []
+          for p in sorted(Path("corpus/poisoned").glob("*.md")):
+              (flagged if s.is_malicious(p.read_text(encoding="utf-8"))[0] else clean).append(p.name)
+          print("FLAGGED by signatures:", *flagged, sep="\n  ")
+          print("MISSED (fluent/GASLITE — caught later by anomaly/generation layers):", *clean, sep="\n  ")
+          PY
