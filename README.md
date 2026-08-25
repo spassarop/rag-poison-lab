@@ -212,7 +212,7 @@ rag-poison-lab/
     ├── cases.py                # Loader for the attack-case contract
     ├── judge.py                # L3 LLM-as-judge (majority vote)
     ├── conftest.py             # Black-box fixtures + case parametrization
-    ├── test_l1_canary.py       # L1: deterministic canary assertion
+    ├── test_l1_canary.py       # L1: end-to-end canary invariant (unconditional)
     ├── test_l2_corpus.py       # L2: parametrized over every attack case
     ├── test_l3_llm_judge.py    # L3: semantic evaluation for canary-less cases
     └── test_defenses.py        # Defense layers: which control catches what
@@ -580,11 +580,13 @@ pytest tests/ --html=reports/report.html
 export API_BASE_URL=http://localhost:8000   # override the API URL if needed
 ```
 
-**L1 — deterministic canary.** A single, projector-friendly test: ask a trigger and
-assert the canary URL is *not* in the answer. It targets the **plausible-content**
-refund case on purpose (see below) — an aligned model resists the explicit/obvious injection, so
-the headline red comes from the disguised poison. With the KB poisoned and no
-defenses, it fails red.
+**L1 — end-to-end canary invariant.** One deterministic assertion of the property that
+matters to the user: for every trigger that defines a canary, the answer must not contain
+it. The check is **unconditional**, it inspects only the user-facing answer, so it holds
+the system to the *outcome* regardless of retrieval mechanics, and flags a case even when
+the canary was supplied by a *different* poison sharing the same payload (cross-
+contamination). It is the acceptance gate: "did the phishing URL ever reach a user?".
+With the KB poisoned and no defenses, it fails red and lists every offending trigger.
 
 **L2 — parametrized over the contract.** `pytest_generate_tests` expands one row per
 case in `corpus_attacks.yaml`, so the suite grows with the contract and never needs
@@ -597,8 +599,10 @@ two metrics:
   the answer contains the canary (the user-facing damage). It **skips** when the
   poison was not retrieved (per the chat response's `retrieved_ids`), since GCR is
   only meaningful once the poison reaches the model — **this avoids a misleading green**
-  for an attack that never got retrieved. Failure messages include the case id,
-  technique, and OWASP category.
+  for an attack that never got retrieved. This is the **attributed, per-technique**
+  reading (compromise conditional on the case's *own* poison reaching the model), which
+  complements the unconditional end-to-end invariant. Failure messages include the case
+  id, technique, and OWASP category.
 
 **Overt vs plausible injections — read the green carefully.** The cases come in two
 flavors along an axis orthogonal to obfuscation:
@@ -614,7 +618,7 @@ flavors along an axis orthogonal to obfuscation:
   payload is disguised as legitimate support content, with the canary URL framed as an
   identity-verification step and no jailbreak markers. These slip past alignment and
   the generation test fails **red**. This is the realistic poisoning (PoisonedRAG
-  style) and what L1 targets.
+  style).
 
 **Extending it with your own attacks**:
 
