@@ -322,6 +322,15 @@ def main() -> None:
                         help="Dump results to a JSON file")
     args = parser.parse_args()
 
+    # Fall back to the curated core KB when the generated bulk corpus is absent, so the
+    # script runs without first generating 200 Ollama docs. For the real
+    # scale experiment, generate the bulk corpus and it is used automatically.
+    if not (args.corpus.exists() and any(args.corpus.glob("*.md"))):
+        core = repo_root / "corpus" / "core"
+        if core.exists() and any(core.glob("*.md")):
+            print(f"note: {args.corpus} empty → using {core} (curated core; scale limited).")
+            args.corpus = core
+
     do_generation = not args.no_generation
 
     print("Loading attack cases...")

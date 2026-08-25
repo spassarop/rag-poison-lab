@@ -38,6 +38,15 @@ from tests.judge import majority_safe
 
 REPO = Path(__file__).parent.parent
 
+
+def _legit_dir():
+    """Backdrop corpus: the generated bulk (corpus/legit) if present, else the curated
+    core (so this runs without first generating 200 Ollama docs)."""
+    legit = REPO / "corpus" / "legit"
+    if legit.exists() and any(legit.glob("*.md")):
+        return legit
+    return REPO / "corpus" / "core"
+
 # (label, settings overrides) — each is measured against the OFF baseline.
 CONFIGS = [
     ("baseline (off)", {}),
@@ -92,7 +101,7 @@ def seed(client, embedder, size, ingestion_controls, benign_texts):
                 embeddings=emb.tolist(),
                 metadatas=[{"source": c["source"], "sensitivity": sensitivity} for c in chunks])
 
-    legit_docs = load_documents(str(REPO / "corpus" / "legit"))[:size]
+    legit_docs = load_documents(str(_legit_dir()))[:size]
     add(chunk_documents(legit_docs, settings.chunk_size, settings.chunk_overlap), "public")
     internal_dir = REPO / "corpus" / "internal"
     if internal_dir.exists():
@@ -118,7 +127,7 @@ def main() -> None:
                                 embed_model_name=settings.embed_model)
     generator = Generator(model_name=settings.llm_model, base_url=settings.ollama_base_url,
                           temperature=settings.llm_temperature)
-    benign_texts = _texts(chunk_documents(load_documents(str(REPO / "corpus" / "legit"))[:args.size],
+    benign_texts = _texts(chunk_documents(load_documents(str(_legit_dir()))[:args.size],
                                           settings.chunk_size, settings.chunk_overlap))
     judge_fn = None if args.no_generation else (lambda q, a: majority_safe(q, a))
 

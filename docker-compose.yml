@@ -22,6 +22,13 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - CHROMA_PATH=http://chroma:8000
+      # Judge PANEL: distinct model families for independent opinions (a single model at
+      # temperature 0 just repeats itself). Pull them first: `ollama pull gemma2:2b`
+      # (llama3.1 / qwen2.5 you likely already have). Empty → single JUDGE_MODEL.
+      - JUDGE_MODELS=${JUDGE_MODELS:-llama3.1:8b-instruct-q4_K_M,qwen2.5:7b,gemma2:2b}
+      # Demo control panel (DEMO ONLY). Off by default; enable for the recording panel:
+      #   ENABLE_ADMIN=1 docker compose up -d api   → panel at http://localhost:8000/ui/
+      - ENABLE_ADMIN=${ENABLE_ADMIN:-0}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -30,6 +37,8 @@ services:
     volumes:
       - ./corpus:/app/corpus:ro
       - ./attacks:/app/attacks:ro
+      # UI is bind-mounted (not baked) so you can tweak the panel and just refresh.
+      - ./ui:/app/ui:ro
 
 volumes:
   chroma_data:

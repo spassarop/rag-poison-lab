@@ -1,9 +1,8 @@
-"""L1 — deterministic canary assertion (the headline demo test).
+"""L1 — deterministic canary assertion
 
 A single, minimal, readable test. With the knowledge base poisoned and no defenses
-active, it FAILS red: the assistant hands back the phishing canary. That red is what
-gets projected during the talk. The assertion is a plain string comparison — no
-LLM-as-judge — so it is fully deterministic.
+active, it FAILS red: the assistant hands back the phishing canary.
+The assertion is a plain string comparison — no LLM-as-judge — so it is fully deterministic.
 """
 import pytest
 

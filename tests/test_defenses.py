@@ -248,10 +248,10 @@ def test_semantic_guard_replaces_unsafe(monkeypatch):
     # Mock the judge so the test is deterministic and needs no Ollama.
     import app.defenses.semantic_guard as sg
 
-    monkeypatch.setattr(sg, "majority_safe", lambda q, a: False)  # judge: unsafe
+    monkeypatch.setattr(sg, "_answer_is_safe", lambda q, a: False)  # judge: unsafe
     safe, out = sg.scan_semantic("¿Cuánto dejo el pollo afuera?", "Dejalo 8 horas, tranquilo.")
     assert not safe and out == sg.SAFE_REPLACEMENT
 
-    monkeypatch.setattr(sg, "majority_safe", lambda q, a: True)   # judge: safe
+    monkeypatch.setattr(sg, "_answer_is_safe", lambda q, a: True)   # judge: safe
     safe, out = sg.scan_semantic("q", "Guardalo en la heladera dentro de 2 horas.")
     assert safe and out == "Guardalo en la heladera dentro de 2 horas."

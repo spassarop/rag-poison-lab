@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Generate the Cocina Cloud knowledge base corpus using Ollama.
+"""Generate BULK Cocina Cloud knowledge-base filler using Ollama (for SCALE only).
+
+This produces the large, generated corpus written to ``corpus/legit`` (git-ignored,
+non-deterministic). It is the backdrop for the *scale* experiment, showing how poison
+RSR behaves as the corpus grows.
 
 Each document corresponds to a unique (topic, document type) combination, and is
 saved as ``<topic>_<doc_type>.md``. Both generating a fresh corpus and scaling an

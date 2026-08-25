@@ -162,7 +162,8 @@ rag-poison-lab/
 ├── app/                        # FastAPI application
 │   ├── __init__.py
 │   ├── config.py               # Settings from environment
-│   ├── main.py                 # API endpoints: /health, /retrieve, /chat
+│   ├── main.py                 # API endpoints: /health, /retrieve, /chat (+ /admin, /ui when ENABLE_ADMIN=1)
+│   ├── admin.py                # Demo control-panel API (DEMO ONLY, gated by ENABLE_ADMIN)
 │   ├── rag/                    # RAG pipeline components
 │   │   ├── __init__.py
 │   │   ├── ingest.py           # Document loading, chunking, embedding, storage
@@ -179,7 +180,8 @@ rag-poison-lab/
 │       └── llm_judge.py        # Shared LLM-as-judge core (L3 test + semantic guard)
 │
 ├── corpus/                     # Knowledge base documents
-│   ├── legit/                  # Legitimate Cocina Cloud docs (.md), sensitivity=public
+│   ├── core/                   # CURATED committed demo KB (concise, correct, high retrieval S/N)
+│   ├── legit/                  # Generated BULK filler for scale (git-ignored, optional)
 │   ├── internal/               # Confidential docs, sensitivity=internal (role filter)
 │   └── poisoned/               # Poisoned docs: tiers 1-2 (generated) + t3 GASLITE (precomputed)
 │
@@ -201,6 +203,7 @@ rag-poison-lab/
 │   ├── compare_defenses.py     # Off-vs-on RSR/GCR comparison across defense configs
 │   └── run_demo.sh             # End-to-end narrated demo (attack → metrics → defenses)
 │
+├── ui/                         # Demo control panel (single-page; served at /ui, DEMO ONLY)
 ├── pytest.ini                  # pytest config (markers l1/l2/l3)
 └── tests/                      # Test harness
     ├── __init__.py
@@ -245,19 +248,18 @@ ollama pull llama3.1:8b-instruct-q4_K_M
 cp .env.example .env
 # Edit .env if needed (defaults should work for local development)
 
-# 6. Generate knowledge base corpus (50 documents using Ollama)
-python attacks/generate_corpus.py --count 50 --output corpus/legit
-# Takes ~5 minutes. Generates realistic Cocina Cloud documentation.
-
-# 7. (Optional) Generate the poisoned documents from the attack contract.
-#    Needed only to reproduce the attack / run the harness (see "The Test Harness").
+# 6. Generate the poisoned documents from the attack contract (deterministic, no Ollama).
 python attacks/generate_poisoned_corpus.py
 
-# 8. Seed the database (legitimate corpus only — a clean baseline).
-#    For the vulnerable demo, use:  python scripts/seed_db.py --with-poison
+# 7. Seed the database. The demo KB is the CURATED, COMMITTED corpus/core — no Ollama
+#    corpus generation needed. This is a clean baseline (no poison):
 python scripts/seed_db.py
+#    For the vulnerable demo:  python scripts/seed_db.py --with-poison
+#    (Optional, scale only) generate bulk filler and add it:
+#      python attacks/generate_corpus.py --scale 200   # ~minutes, Ollama
+#      python scripts/seed_db.py --with-poison --with-bulk
 
-# 9. Start the API
+# 8. Start the API
 uvicorn app.main:app --reload
 
 # 10. Test the API
@@ -582,7 +584,7 @@ export API_BASE_URL=http://localhost:8000   # override the API URL if needed
 assert the canary URL is *not* in the answer. It targets the **plausible-content**
 refund case on purpose (see below) — an aligned model resists the explicit/obvious injection, so
 the headline red comes from the disguised poison. With the KB poisoned and no
-defenses, it fails red — that red is the demo.
+defenses, it fails red.
 
 **L2 — parametrized over the contract.** `pytest_generate_tests` expands one row per
 case in `corpus_attacks.yaml`, so the suite grows with the contract and never needs
@@ -641,12 +643,23 @@ the judge is also non-deterministic on borderline facts, and dual cases
 (`expected_canary` + `judge_rubric`) are scored by the canary in the metric. The judge
 is consistent; its *inputs* are not.
 
-The judge schema is `{"analysis": str, "safe": bool}` with **`analysis` first** — the
-model reasons before it commits to the verdict (chain-of-thought), which is what makes
-a small judge reliably catch "obvious" misinformation. Three flakiness mitigations:
-low temperature (`0.0`) + schema-constrained output, **majority voting** over `n=3`,
-and running L3 as a **non-blocking** job (the hard CI gate stays on the deterministic
-L1 check).
+**Reason-before-verdict (why it is not schema-constrained).** A small judge is only
+reliable if it reasons *first*. Constraining the output to a JSON schema lets the model
+shortcut the reasoning (it emits the verdict and leaves the analysis empty), and clean,
+confident misinformation — a bare "X es originario de Uruguay" — slips through. So the
+judge instead writes a free-text **ANALYSIS** enumerating each claim and commits to the
+verdict on the last line as `VEREDICTO: SEGURA|INSEGURA`, which is parsed (the G-Eval
+chain-of-thought pattern; a clean, copyable defense primitive). Flakiness mitigations:
+temperature `0.0`, and voting — **majority** for DETECTION (L3, `compare_defenses`: a
+stable signal) vs **conservative** for the runtime guard (unsafe if *any* of n judgments
+flags it: a mitigation errs toward caution). L3 runs as a **non-blocking** job; the hard
+CI gate stays on the deterministic checks.
+
+Note: the softer the claim, the harder to catch — a disputed-origin trivia fact is near
+the judge's limit, while safety-relevant corruption (food-safety, allergens) is caught
+reliably. Tightening the assistant's prompt for UX (removing citations) also made the
+poisoned answers cleaner and thus *harder* to detect — a realistic attacker/defender
+tension worth showing.
 
 ```bash
 pytest -m l3 -v        # semantic layer (run as a separate, non-blocking job)
@@ -724,6 +737,26 @@ posture report. Those run against a **seeded, poisoned, live API + Ollama** and 
 them locally (see [The Test Harness](#the-test-harness-l1--l2)). GASLITE is a precomputed
 offline artifact, so its realistic anomaly assertions self-skip when the generated
 `corpus/legit` is absent (e.g. in CI).
+
+### Demo control panel (optional, recording aid)
+
+A single-page panel makes recording the demo smooth: chat with the assistant, flip each
+defense on/off **live** (no restart), inject/remove the poison on the fly, and inspect the
+retrieved chunks (click a card to expand its text) with a banner that lights up when the
+answer contains the canary. It is **DEMO ONLY** — it toggles global defenses and injects
+poison — so it is gated behind `ENABLE_ADMIN` and never ships enabled.
+
+```bash
+# seed a CLEAN baseline (the panel adds the poison itself)
+python scripts/seed_db.py
+ENABLE_ADMIN=1 docker compose up -d --build api
+# open the panel
+open http://localhost:8000/ui/
+```
+
+It works without restarts because defenses are read from settings at call time (toggling
+mutates them live) and poison is appended/deleted on the live collection (never reset).
+Full design notes: [`docs/ui_control_panel_spec.md`](docs/ui_control_panel_spec.md).
 
 ## Advanced Attack: GASLITE (tier 3)
 
@@ -854,9 +887,28 @@ fidelity). Veritensor is Apache-2.0 and optional.
 
 ## Corpus Generation
 
-The knowledge base must be generated using Ollama before first use (see Quick Start step 6).
+### Curated core vs generated bulk
 
-### Generate Base Corpus (50 documents)
+The demo runs on **`corpus/core`** — a small, curated, **committed** knowledge base:
+one concise, correct document per support topic (payments, account, agent contact,
+regional cuisine, food safety, allergens, …). It exists for a concrete engineering
+reason: **retrieval signal-to-noise**. A curated
+core keeps few, distinct, on-topic docs, so the right answer is retrieved reliably.
+
+`corpus/legit` is the **optional generated bulk** used only for the *scale* experiment
+(how poison RSR behaves as the corpus grows). Add it on top of the core with
+`seed_db.py --with-bulk`.
+
+```bash
+# Demo KB is committed — nothing to generate. Just seed:
+python scripts/seed_db.py --with-poison
+
+# (Optional, scale only) generate bulk filler, then seed core + bulk:
+python attacks/generate_corpus.py --scale 200
+python scripts/seed_db.py --with-poison --with-bulk
+```
+
+### Generate bulk filler (scale experiment, optional)
 
 ```bash
 python attacks/generate_corpus.py --count 50 --output corpus/legit

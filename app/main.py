@@ -8,7 +8,9 @@ Exposes three endpoints:
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional
+import os
 import time
+from pathlib import Path
 from urllib.parse import urlparse
 import chromadb
 from contextlib import asynccontextmanager
@@ -133,6 +135,17 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan
 )
+
+# Demo control panel (DEMO ONLY). Gated behind ENABLE_ADMIN=1 so it never ships enabled:
+# it exposes live defense toggles and poison injection, served same-origin at /ui so the
+# panel's fetch() calls to /chat, /retrieve and /admin need no CORS config.
+if os.getenv("ENABLE_ADMIN", "0") == "1":
+    from app.admin import router as admin_router
+    app.include_router(admin_router)
+    _ui_dir = Path(__file__).parent.parent / "ui"
+    if _ui_dir.exists():
+        from fastapi.staticfiles import StaticFiles
+        app.mount("/ui", StaticFiles(directory=str(_ui_dir), html=True), name="ui")
 
 
 @app.get("/health", response_model=HealthResponse)

@@ -28,8 +28,9 @@ def main():
     parser.add_argument(
         "--corpus",
         type=Path,
-        default=Path("corpus/legit"),
-        help="Path to corpus directory (default: corpus/legit)"
+        default=Path("corpus/core"),
+        help="Primary knowledge base to ingest (default: corpus/core — the curated, "
+             "committed demo KB with concise, correct docs and good retrieval S/N)."
     )
     parser.add_argument(
         "--reset",
@@ -64,6 +65,19 @@ def main():
         type=Path,
         default=Path("corpus/poisoned"),
         help="Path to the poisoned corpus (default: corpus/poisoned)"
+    )
+    parser.add_argument(
+        "--with-bulk",
+        action="store_true",
+        help="Also ingest the large Ollama-generated corpus (corpus/legit) on top of "
+             "the curated core. Use for scale demos/experiments; NOT needed for the demo "
+             "(it re-introduces retrieval noise)."
+    )
+    parser.add_argument(
+        "--bulk-corpus",
+        type=Path,
+        default=Path("corpus/legit"),
+        help="Path to the generated bulk corpus for --with-bulk (default: corpus/legit)"
     )
     parser.add_argument(
         "--internal-corpus",
@@ -172,6 +186,29 @@ def main():
             )
             print(f"🔒 Internal chunks stored: {internal_result['chunks_stored']}")
             print()
+
+        # Optionally ingest the large generated corpus (scale demos / experiments).
+        # The demo does NOT need this — it only adds retrieval noise; keep it opt-in.
+        if args.with_bulk:
+            if args.bulk_corpus.exists() and any(args.bulk_corpus.glob("*.md")):
+                n_bulk = len(list(args.bulk_corpus.glob("*.md")))
+                print(f"📦 Ingesting {n_bulk} bulk documents from {args.bulk_corpus} "
+                      f"(scale mode) ...")
+                bulk_result = ingest(
+                    corpus_path=str(args.bulk_corpus),
+                    chroma_client=chroma_client,
+                    collection_name=collection_name,
+                    chunk_size=settings.chunk_size,
+                    chunk_overlap=settings.chunk_overlap,
+                    embed_model=settings.embed_model,
+                    reset=False,
+                )
+                print(f"📦 Bulk chunks stored: {bulk_result['chunks_stored']}")
+                print()
+            else:
+                print(f"📦 --with-bulk given but {args.bulk_corpus} is empty; "
+                      f"generate it with 'python attacks/generate_corpus.py --scale 200'. Skipping.")
+                print()
 
         # Optionally ingest the poisoned documents into the SAME collection,
         # appending (reset=False) so the legitimate corpus is preserved. This is

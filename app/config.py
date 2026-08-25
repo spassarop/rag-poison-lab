@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     # LLM Configuration
     llm_model: str = Field(default="llama3.1:8b-instruct-q4_K_M", alias="LLM_MODEL")
     judge_model: str = Field(default="llama3.1:8b-instruct-q4_K_M", alias="JUDGE_MODEL")
+    # JUDGE_MODELS: comma-separated PANEL of judges from DIFFERENT model families. A single
+    # model at temperature 0 gives identical votes (no real diversity), so the panel is how
+    # we get independent opinions. Empty → falls back to [judge_model].
+    judge_models: str = Field(default="", alias="JUDGE_MODELS")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     # Generation temperature. Default 0.0 = greedy/deterministic, so repeated
     # measurements are reproducible. Raise it only to study output variance.
@@ -44,6 +48,13 @@ class Settings(BaseSettings):
     defense_semantic_output: str = Field(default="off", alias="DEFENSE_SEMANTIC_OUTPUT")
     # Retrieval-time access control: customer role only sees public chunks.
     defense_retrieval_filter: str = Field(default="off", alias="DEFENSE_RETRIEVAL_FILTER")
+
+    def judge_models_list(self) -> list:
+        """The judge panel: a list of Ollama model tags. Empty JUDGE_MODELS → single judge."""
+        raw = (self.judge_models or "").strip()
+        if raw:
+            return [m.strip() for m in raw.split(",") if m.strip()]
+        return [self.judge_model]
 
     def ingestion_controls(self) -> set:
         """Parse DEFENSE_INGESTION into a set of active controls (empty if off)."""
