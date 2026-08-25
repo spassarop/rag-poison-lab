@@ -7,7 +7,7 @@
 This is the **tier-3** attack. Unlike tiers 1–2 (which depend on the attacker
 *writing* plausible text), GASLITE optimizes a passage by **gradient** against the
 embedding model so it is retrieved even in a large corpus, **without** human-suspicious
-strings. It is the canonical **OWASP LLM08 (Vector and Embedding Weaknesses)** attack,
+strings. It is the canonical **OWASP LLM09 (Vector and Embedding Weaknesses)** attack,
 and in the defense stage it shows that signature/static ingestion filters do **not**
 catch it.
 
@@ -245,4 +245,4 @@ replaces the placeholder, that case is skipped and its RSR is not real.
   §3 threat model, §4.1 objective (Eq. 2), §6.1 knows-all, §6.2 knows-what, §7 defenses,
   App. D (multi-passage / partitioning), §G.6.1 synthetic queries.
 - PoisonedRAG — arXiv:2402.07867 (comparison baseline).
-- OWASP LLM08: Vector and Embedding Weaknesses.
+- OWASP LLM09: Vector and Embedding Weaknesses.

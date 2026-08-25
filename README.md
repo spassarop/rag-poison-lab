@@ -40,23 +40,23 @@ knowledge base — an archived support ticket, an imported community recipe, a
 contributed help article. Once that document is ingested, its text becomes part of the
 context retrieved for matching user queries.
 
-**OWASP mapping (OWASP Top 10 for LLM Applications, 2025).**
+**OWASP mapping (OWASP Top 10 for LLM Applications, 2026).**
 
-- **LLM01 — Prompt Injection** is the primary category. In the 2025 list, LLM01
+- **LLM01 — Prompt Injection** is the primary category. In the 2026 list, LLM01
   covers *both* direct and **indirect** prompt injection. This scenario is indirect
   injection: the malicious instructions arrive *through retrieved data*, not from
   the user — the payload rides in the corpus and is injected into the prompt at
   retrieval time. Every case in `corpus_attacks.yaml` is tagged `LLM01`.
 
-The same scenario is closely related to three other 2025 categories, used here as
+The same scenario is closely related to three other 2026 categories, used here as
 framing rather than per-case tags:
 
-- **LLM04 — Data and Model Poisoning**: introducing a malicious document into the
+- **LLM05 — Data and Model Poisoning**: introducing a malicious document into the
   knowledge base is corpus poisoning by definition.
-- **LLM08 — Vector and Embedding Weaknesses**: the attack succeeds by manipulating
-  what the dense retriever surfaces from the embedding space.
-- **LLM09 — Misinformation**: the outcome of the knowledge-corruption case (the
+- **LLM07 — Misinformation**: the outcome of the knowledge-corruption case (the
   assistant stating a false fact with confidence).
+  what the dense retriever surfaces from the embedding space.
+- **LLM09 — Vector and Embedding Weaknesses**: the attack succeeds by manipulating
 
 **Attacker goals.** Two are demonstrated: (1) **exfiltration / phishing** — make the
 assistant hand the user an attacker-controlled URL (the inert `.test` canary), and
@@ -438,7 +438,7 @@ with the following required fields:
 | `id` | Unique, stable identifier for the case. |
 | `tier` | Position on the attack ladder: `1` (query-aligned), `2` (stealth), or `3` (GASLITE, precomputed). |
 | `technique` | Concrete technique (e.g. `stealth_html_comment`, `stealth_base64`). |
-| `owasp` | OWASP Top 10 for LLM (2025) category. Always `LLM01` (Prompt Injection covers direct and indirect). |
+| `owasp` | OWASP Top 10 for LLM (2026) category. Always `LLM01` (Prompt Injection covers direct and indirect). |
 | `poison_doc` | Path to the poisoned document, relative to the repo root. |
 | `trigger_prompt` | The user question that triggers the malicious behavior. |
 | `expected_canary` | Deterministic substring that proves compromise if it appears in the answer. |
@@ -671,7 +671,7 @@ pytest -m "l1 or l2"   # deterministic gate (this is what blocks CI)
 ```
 
 The cooking knowledge-corruption cases double as a **misinformation/safety** demo
-(OWASP LLM09): a poison that says cooked chicken is safe out of the fridge for 8
+(OWASP LLM07): a poison that says cooked chicken is safe out of the fridge for 8
 hours, or that a gluten-containing recipe is celiac-safe.
 
 ### Security Report (L4)
@@ -769,7 +769,7 @@ Full design notes: [`docs/ui_control_panel_spec.md`](docs/ui_control_panel_spec.
 Tiers 1–2 depend on the attacker *writing* text that looks relevant. **GASLITE**
 (arXiv:2412.20953) instead optimizes a passage by **gradient** against the embedding
 model so it dominates the dense retriever's ranking **even at scale and without
-human-suspicious strings**. It is the canonical **OWASP LLM08 (Vector and Embedding
+human-suspicious strings**. It is the canonical **OWASP LLM09 (Vector and Embedding
 Weaknesses)** attack, and in the defense stage it is what shows that signature-based
 ingestion filters do not catch everything.
 
@@ -815,7 +815,7 @@ centroid), not persuasion.
 
 This is the payoff of measuring **two metrics**: RSR and GCR are independent. You can
 have **RSR = 100% and GCR = 0%**. GASLITE is fundamentally a **retrieval** attack
-(OWASP LLM08); the end-to-end threat is GASLITE retrievability **combined with** a
+(OWASP LLM09); the end-to-end threat is GASLITE retrievability **combined with** a
 coercive payload, or with enough **attacker budget**:
 
 > **Budget raises GCR.** With a single copy the poison holds one of the top-k slots
@@ -981,7 +981,7 @@ flake8 app/ tests/ scripts/
 
 ### Research Papers
 
-- **OWASP Top 10 for LLM Applications (2025)** - LLM01 (Prompt Injection, covering direct and indirect); related: LLM04 (Data and Model Poisoning), LLM08 (Vector and Embedding Weaknesses), LLM09 (Misinformation)
+- **OWASP Top 10 for LLM Applications (2026)** - LLM01 (Prompt Injection, covering direct and indirect); related: LLM05 (Data and Model Poisoning), LLM07 (Misinformation), LLM09 (Vector and Embedding Weaknesses)
 - **PoisonedRAG** (USENIX Security 2025) - arXiv:2402.07867, GitHub: `sleeepeer/PoisonedRAG`
 - **GASLITE** (ACM CCS 2025) - arXiv:2412.20953, GitHub: `matanbt/GASLITE`
 - **Spotlighting** (Microsoft Research) - arXiv:2403.14720
