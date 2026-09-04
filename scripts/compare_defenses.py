@@ -189,17 +189,20 @@ def main() -> None:
     def pct(x):
         return f"{x*100:.0f}%"
 
-    print("\n" + "=" * 78)
-    print(f"{'defense config':32} {'RSR':>6} {'GCR(e2e)':>9} {'GCR(attr)':>10} {'compromised':>12}")
-    print("-" * 78)
+    print("\n" + "=" * 86)
+    print(f"{'defense config':32} {'RSR':>6} {'GCR(e2e)':>9} {'GCR(attr)':>10} "
+          f"{'comp(e2e)':>11} {'comp(attr)':>11}")
+    print("-" * 86)
     for label, res in rows:
         n = res["n_cases"]
         attr = _attributed_compromised(res)
         gcr_e2e = "n/a" if args.no_generation else pct(res["gcr_absolute"])
         gcr_attr = "n/a" if args.no_generation else pct(attr / n if n else 0.0)
-        comp = f"{res['n_compromised']}/{n}" if not args.no_generation else "-"
-        print(f"{label:32} {pct(res['rsr']):>6} {gcr_e2e:>9} {gcr_attr:>10} {comp:>12}")
-    print("=" * 78)
+        comp_e2e = f"{res['n_compromised']}/{n}" if not args.no_generation else "-"
+        comp_attr = f"{attr}/{n}" if not args.no_generation else "-"
+        print(f"{label:32} {pct(res['rsr']):>6} {gcr_e2e:>9} {gcr_attr:>10} "
+              f"{comp_e2e:>11} {comp_attr:>11}")
+    print("=" * 86)
     print("RSR        = poison reached the top-k (retrievability).")
     print("GCR(e2e)   = the canary reached the user for that query — REAL user harm, but")
     print("             cross-contaminated: every phishing case shares one canary, so a")

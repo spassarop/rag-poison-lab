@@ -42,9 +42,19 @@ def _pipeline():
     return m.rag_pipeline
 
 
+def _poison_sources() -> list:
+    """Filenames of the poison docs. Poison is identified by SOURCE (not the is_poison
+    flag) so the panel sees ALL poison in the collection — whether it was injected by the
+    panel or seeded via `seed_db.py --with-poison` (which does not set the flag)."""
+    return [p.name for p in POISON_DIR.glob("*.md")] if POISON_DIR.exists() else []
+
+
 def _poison_chunk_count(collection) -> int:
+    sources = _poison_sources()
+    if not sources:
+        return 0
     try:
-        res = collection.get(where={"is_poison": True})
+        res = collection.get(where={"source": {"$in": sources}})
         return len(res.get("ids", []))
     except Exception:
         return 0
@@ -139,9 +149,12 @@ def set_poison(req: PoisonAction):
     col = p.retriever.collection
     embedder = p.retriever.embedder
 
-    # Always clear existing panel poison first (idempotent add, clean remove).
+    # Always clear ALL poison first (by source → covers panel-injected AND seeded poison).
+    # Makes add idempotent and remove a genuinely clean wipe.
+    sources = _poison_sources()
     try:
-        col.delete(where={"is_poison": True})
+        if sources:
+            col.delete(where={"source": {"$in": sources}})
     except Exception:
         pass
 
@@ -172,7 +185,10 @@ def set_poison(req: PoisonAction):
     if chunks:
         embs = embedder.encode([c["text"] for c in chunks])
         col.add(
-            ids=[f"POISON::{c['id']}" for c in chunks],
+            # Ids follow the metrics' <source>::<i> contract (poison_in_topk splits on
+            # '::'), so a panel-poisoned KB is recognized by the harness just like one
+            # seeded via seed_db --with-poison. Poison is identified by source metadata.
+            ids=[c["id"] for c in chunks],
             documents=[c["text"] for c in chunks],
             embeddings=embs.tolist(),
             metadatas=[{"source": c["source"], "sensitivity": "public", "is_poison": True}
