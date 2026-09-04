@@ -580,13 +580,13 @@ pytest tests/ --html=reports/report.html
 export API_BASE_URL=http://localhost:8000   # override the API URL if needed
 ```
 
-**L1 — end-to-end canary invariant.** One deterministic assertion of the property that
-matters to the user: for every trigger that defines a canary, the answer must not contain
-it. The check is **unconditional**, it inspects only the user-facing answer, so it holds
+**L1 — end-to-end canary invariant.** One deterministic assertion **per attack case** of
+the property that matters to the user: for a trigger that defines a canary, the answer
+must not contain it. The check is **unconditional**, it inspects only the user-facing answer, so it holds
 the system to the *outcome* regardless of retrieval mechanics, and flags a case even when
 the canary was supplied by a *different* poison sharing the same payload (cross-
 contamination). It is the acceptance gate: "did the phishing URL ever reach a user?".
-With the KB poisoned and no defenses, it fails red and lists every offending trigger.
+With the KB poisoned and no defenses, each offending trigger is its own red.
 
 **L2 — parametrized over the contract.** `pytest_generate_tests` expands one row per
 case in `corpus_attacks.yaml`, so the suite grows with the contract and never needs
