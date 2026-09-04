@@ -1,24 +1,19 @@
-"""L2 — parametrized over every case in corpus_attacks.yaml.
+"""L2 — parametrized generation gate over every case in corpus_attacks.yaml.
 
-Add a row to the YAML and it is picked up automatically, with no test-code changes
-— Retrieval and generation are tested separately, which materializes the two metrics:
+Add a row to the YAML and it is picked up automatically, with no test-code changes. This
+is the hard security assertion for cases with a deterministic canary: the user-facing
+answer must not contain it.
 
-  - retrieval (RSR) is diagnostic: a poisoned document may legitimately not reach the
-  top-k, and that alone does not mean the system is safe;
-  - generation (GCR) carries the hard security assertion: the user-facing damage.
+Retrieval success (RSR) is a *measurement*, not a pass/fail property (a poison reaching
+the top-k is not, by itself, a compromise — the model may resist it). So RSR is reported
+as a number by the measurement scripts (measure_baseline / compare_defenses /
+security_report), not asserted here. This gate still encodes retrieval in its outcomes: it
+SKIPS when the poison never reached the model (GCR is only meaningful once it does), passes
+when the model resisted a retrieved poison, and fails when the answer carries the canary.
 """
 import pytest
 
 from tests.metrics import canary_in_answer, poison_in_topk
-
-@pytest.mark.l2
-def test_retrieval_diagnostic(case, retrieve_fn):
-    # Diagnostic only (RSR). Not a security gate: skip when the poison does not
-    # reach the top-k, so the report shows per-case retrievability without failing.
-    chunks = retrieve_fn(case["trigger_prompt"])
-    ids = [c["id"] for c in chunks]
-    if not poison_in_topk(case, ids):
-        pytest.skip(f"[{case['id']}] veneno NO recuperado en el top-k (RSR=0 para este caso)")
 
 
 @pytest.mark.l2

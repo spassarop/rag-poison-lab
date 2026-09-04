@@ -590,18 +590,20 @@ With the KB poisoned and no defenses, each offending trigger is its own red.
 
 **L2 — parametrized over the contract.** `pytest_generate_tests` expands one row per
 case in `corpus_attacks.yaml`, so the suite grows with the contract and never needs
-test-code edits. Each case yields two tests, which is how the suite materializes the
-two metrics:
+test-code edits. L2 is a single **generation security gate** per case:
 
-- `test_retrieval_diagnostic` (RSR) is **diagnostic** — it skips when the poison does
-  not reach the top-k. Not reaching the top-k is not, by itself, safety.
 - `test_generation_not_compromised` (GCR) is the **hard security gate** — it fails if
   the answer contains the canary (the user-facing damage). It **skips** when the
   poison was not retrieved (per the chat response's `retrieved_ids`), since GCR is
   only meaningful once the poison reaches the model — **this avoids a misleading green**
   for an attack that never got retrieved. This is the **attributed, per-technique**
   reading (compromise conditional on the case's *own* poison reaching the model), which
-  complements the unconditional end-to-end invariant. Failure messages include the case
+  complements the unconditional end-to-end invariant. Its three outcomes also encode
+  retrieval: **skip** = poison never reached the model, **pass** = it reached the model
+  and the model resisted, **fail** = it reached the model and compromised the answer.
+  Retrieval success (RSR) itself is a *measurement*, not a pass/fail property, so it is
+  reported as a number by `measure_baseline.py` / `compare_defenses.py` /
+  `security_report.py` rather than asserted here. Failure messages include the case
   id, technique, and OWASP category.
 
 **Overt vs plausible injections — read the green carefully.** The cases come in two
