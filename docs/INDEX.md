@@ -27,7 +27,7 @@ Complete map of all documentation. Pick your entry point based on what you want 
 
 - [Defense Layers](DEFENSE_LAYERS.md): What each control catches, trade-offs, red-to-green story
 - [Architecture](ARCHITECTURE.md): Where defenses land in the pipeline
-- [Testing Methodology](TESTING.md#continuous-integration-githubworkflowsci yml): CI gates and regression testing
+- [CI Pipeline](CI_PIPELINE.md): CI gates and regression testing
 
 ## I Want to Add My Own Attack
 
@@ -39,7 +39,7 @@ Complete map of all documentation. Pick your entry point based on what you want 
 
 - [Defense Layers](DEFENSE_LAYERS.md): Controls to enable
 - [Architecture](ARCHITECTURE.md#environment-configuration): Configuration variables
-- [DEVELOPMENT.md](../DEVELOPMENT.md): Code style, deployment notes
+- [CI Pipeline](CI_PIPELINE.md): Wiring the tests into your pipeline as gates
 
 ## Reference
 
@@ -76,7 +76,6 @@ Complete map of all documentation. Pick your entry point based on what you want 
 | Doc | Purpose |
 |-----|---------|
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | Add attack cases |
-| [../DEVELOPMENT.md](../DEVELOPMENT.md) | Code style, local development |
 
 ## Recommended Reading Paths
 
@@ -138,7 +137,7 @@ A: No. Only test systems you own or have explicit authorization to test. See [Di
 A: The demo corpus is in Spanish, but you can replace it with your own knowledge base. [CONTRIBUTING.md](../CONTRIBUTING.md) shows how to add cases.
 
 **Q: How do I integrate this into my CI pipeline?**
-A: [CI_PIPELINE.md](CI_PIPELINE.md) and [Testing Methodology](TESTING.md#continuous-integration-githubworkflowsci yml) cover this.
+A: [CI_PIPELINE.md](CI_PIPELINE.md) covers this, including how to add the dynamic gates.
 
 **Q: What if I want to use a different LLM?**
 A: Edit `LLM_MODEL` and `JUDGE_MODEL` in `.env`. See [Architecture](ARCHITECTURE.md#environment-configuration).

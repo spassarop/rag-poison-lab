@@ -1,7 +1,7 @@
 name: CI
 
 # Gate = the DETERMINISTIC tests only. test_defenses.py and test_metrics.py run at the
-# function level: no live API, no Ollama, no Docker, no network — so they are stable in CI.
+# function level: no live API, no Ollama, no Docker, no network, so they are stable in CI.
 #
 # The black-box harness (L1 canary, L2 corpus, L3 judge) and the L4 posture report run
 # against a live, seeded API + Ollama and are RED BY DESIGN when poison is present. They
@@ -10,6 +10,9 @@ name: CI
 #   pytest -m l1 ; pytest -m l2 ; pytest -m l3
 #   python scripts/security_report.py
 # GASLITE (tier 3) is precomputed offline and never regenerated in CI.
+#
+# To wire the dynamic tests (L1/L2/L3) into a pipeline as real gates against a live,
+# defended environment, see .github/dynamic-gates.example.yml (a template, not run here).
 
 on:
   push:

@@ -65,7 +65,7 @@ python scripts/security_report.py
 ```
 
 **Why it's not blocked:**
-- Requires full sUT + Ollama
+- Requires the full system under test plus Ollama
 - Generates JSON for dashboard consumption, not a pass/fail
 - Red by design (current state without defenses)
 
@@ -79,34 +79,26 @@ DEFENSE_INGESTION=signatures python scripts/security_report.py  # With defense
 
 Prints which poisons the signature layer catches vs misses. Informational only, since the whole point is that fluent/GASLITE slip past static scanning.
 
+## Adding the Dynamic Gates (needs a live environment)
+
+The live harness is out of the default CI because it needs a running, seeded API plus Ollama, which vanilla runners do not have. That does not mean it cannot be a reliable gate. It can, once you have an environment, and the trick is to run it against your defended system.
+
+Run the harness with your defenses turned on. In that configuration the canary tests (L1 and L2) are deterministic and safe to block on. A green run means the defenses held, and a red run is a real regression that let a poison reach the user. The semantic judge (L3) is not deterministic, so keep it non-blocking, and treat the L4 posture report as an artifact you track over time rather than a pass/fail.
+
+A ready-to-copy template lives at `.github/dynamic-gates.example.yml`. It sits outside `.github/workflows/` on purpose, so Actions does not run it. Copy it into `.github/workflows/`, point it at your Chroma and Ollama, and pick a runner (a self-hosted runner with Ollama and its models is the realistic option). The template seeds with poison, brings up the API with the defense flags on, runs `pytest -m "l1 or l2"` as the blocking gate, runs `pytest -m l3` as non-blocking, and uploads the posture report.
+
 ## What CI Regenerates
 
 **Poisoned corpus:** The contract in `attacks/corpus_attacks.yaml` is deterministic. `generate_poisoned_corpus.py` runs in the job and regenerates all poison docs from it. No randomness.
 
 ## Workflow Structure
 
-```yaml
-on: [push, pull_request]
+The real workflow is `.github/workflows/ci.yml`. It runs on every push and pull request and has two jobs:
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Setup Python
-        uses: actions/setup-python@v4
-      - name: Install deps
-        run: pip install -r requirements.txt -r requirements-dev.txt
-      - name: Generate poisoned corpus
-        run: python attacks/generate_poisoned_corpus.py
-      - name: Unit tests (BLOCKING)
-        run: pytest tests/test_defenses.py tests/test_metrics.py -v
-      - name: Corpus signature scan (INFO)
-        run: python scripts/corpus_scan.py
-      - name: Upload reports
-        if: always()
-        uses: actions/upload-artifact@v3
-```
+- `deterministic-tests` (blocking): installs dependencies, regenerates the poisoned corpus from the contract, and runs `pytest tests/test_defenses.py tests/test_metrics.py`.
+- `corpus-scan` (non-blocking, `continue-on-error: true`): runs the signature scanner over `corpus/poisoned/` and prints what it catches versus what it misses. It is informational, because fluent and GASLITE poisons are expected to slip past static signatures.
+
+Read the file for the exact steps and action versions.
 
 ## Local Equivalents
 
@@ -190,6 +182,6 @@ Common issues:
 
 ## Next Steps
 
-- **Local development:** [DEVELOPMENT.md](../DEVELOPMENT.md)
 - **Testing framework:** [Testing Methodology](TESTING.md)
-- **Code style:** [DEVELOPMENT.md](../DEVELOPMENT.md)
+- **Adding attack cases:** [CONTRIBUTING.md](../CONTRIBUTING.md)
+- **Dynamic gates template:** `.github/dynamic-gates.example.yml`

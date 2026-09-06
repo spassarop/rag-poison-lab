@@ -1,0 +1,93 @@
+# ==============================================================================
+# EXAMPLE: dynamic security gates (needs a live environment)
+#
+# This file lives OUTSIDE .github/workflows/ on purpose, so GitHub Actions never
+# runs it. It is a template. Copy it into .github/workflows/ when you have an
+# environment where the stack can actually run: a self-hosted runner with Ollama
+# and its models, or reachable Chroma and Ollama endpoints.
+#
+# What it adds on top of the default (deterministic) CI: the black-box harness,
+# run against a live, seeded system WITH YOUR DEFENSES ON. That configuration is
+# the whole point. Against the DEFENDED system the canary tests (L1 and L2) are a
+# reliable blocking gate: if a regression lets a poison reach the user, they turn
+# red and the pipeline fails. The semantic judge (L3) stays non-blocking because
+# its verdict is not deterministic, and the L4 posture report is uploaded as an
+# artifact to track over time, not as a pass/fail.
+#
+# Note on Ollama: GitHub-hosted runners are not a good fit for it (models are
+# large and CPU inference is slow). Either run this on a self-hosted runner that
+# already has Ollama and the models pulled, or point OLLAMA_BASE_URL at a
+# reachable endpoint you control.
+# ==============================================================================
+
+name: Dynamic security gates (example)
+
+on:
+  workflow_dispatch: {}   # manual trigger once you copy this into workflows/
+
+env:
+  CHROMA_PATH: http://localhost:8001
+  OLLAMA_BASE_URL: http://localhost:11434   # a reachable Ollama with the models pulled
+  LLM_MODEL: llama3.1:8b-instruct-q4_K_M
+  JUDGE_MODELS: llama3.1:8b-instruct-q4_K_M,qwen2.5:7b,gemma2:2b
+  # Turn the defenses ON. The gate is meant to protect the DEFENDED system, not
+  # the demo baseline. A green run means the defenses held; a red run is a real
+  # regression that let a poison through.
+  DEFENSE_INGESTION: signatures,anomaly
+  DEFENSE_SPOTLIGHTING: "on"
+  DEFENSE_OUTPUT: "on"
+  DEFENSE_SEMANTIC_OUTPUT: "on"
+  DEFENSE_RETRIEVAL_FILTER: "on"
+
+jobs:
+  dynamic-gates:
+    # ubuntu-latest works only if OLLAMA_BASE_URL points somewhere reachable.
+    # For a fully local stack, use a self-hosted runner that has Ollama + models.
+    runs-on: ubuntu-latest
+    services:
+      chroma:
+        image: chromadb/chroma:1.5.9
+        ports:
+          - 8001:8000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Build the poisoned corpus (deterministic, no Ollama)
+        run: python attacks/generate_poisoned_corpus.py
+
+      - name: Seed the knowledge base with poison
+        run: python scripts/seed_db.py --with-poison
+
+      - name: Start the API
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          for i in $(seq 1 30); do curl -sf localhost:8000/health && break; sleep 1; done
+
+      - name: Blocking gate, no canary reaches the user (L1 + L2, defenses ON)
+        run: pytest -m "l1 or l2" -v
+
+      - name: Non-blocking, semantic judge (L3, non-deterministic)
+        continue-on-error: true
+        run: pytest -m l3 -v
+
+      - name: Posture report (uploaded as artifact, not a gate)
+        continue-on-error: true
+        run: python scripts/security_report.py --out reports/security_report.json
+
+      - name: Upload posture report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: reports/security_report.json

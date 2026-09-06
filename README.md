@@ -82,7 +82,6 @@ rag-poison-lab/
 │   ├── CORPUS_GENERATION.md
 │   └── CI_PIPELINE.md
 ├── CONTRIBUTING.md                    # Add your own attack case
-├── DEVELOPMENT.md                     # Local dev setup
 ├── app/                               # FastAPI application
 ├── corpus/                            # Knowledge base (curated + generated)
 ├── attacks/                           # Attack tooling & contracts
