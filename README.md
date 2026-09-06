@@ -9,6 +9,8 @@ Production-grade demonstration of **RAG poisoning attacks** and **defensive test
 > damage, and the defense layers that walk it back. Want to adapt it to your own RAG? See
 > [CONTRIBUTING.md](CONTRIBUTING.md).
 
+> Last version of slides presenting the project and topic: [Google Slides](https://docs.google.com/presentation/d/1mtZcIQFM3ocxwbwhDOykA_kSbJWwcCeU/), made for *testear.la* testing conference.
+
 ## Overview
 
 This project demonstrates how a single poisoned document can compromise a RAG system, and more importantly, provides a **replicable testing framework** that QA engineers can adapt to test RAG poisoning vulnerabilities in their own systems.
