@@ -12,7 +12,7 @@ but the repo still needs a BEIR dataset for two things:
      passage must out-rank.
 
 To make the repo's reported RSR meaningful for THIS lab (not msmarco's), we
-build the dataset from the SUT's own corpus, chunked with the SUT's own
+build the dataset from the system under test's own corpus, chunked with the system under test's own
 splitter so the chunk text/ids match ChromaDB exactly.
 
 What it writes (BEIR GenericDataLoader format)
@@ -30,7 +30,7 @@ import json
 import os
 from pathlib import Path
 
-# Same splitter the SUT uses (app/rag/ingest.py).
+# Same splitter the system under test uses (app/rag/ingest.py).
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer, util as st_util
 

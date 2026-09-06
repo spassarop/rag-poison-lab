@@ -139,7 +139,7 @@ def patch_full_attack(s):
 _XLMR_CLASS = '''class MultilingualMLMFluencyScorer(BertMLMFluencyScorer):
     """MLM fluency scorer on an arbitrary HF masked-LM, loaded generically so its
     tokenizer/vocab can MATCH a non-English retriever. Defaults to xlm-roberta-base,
-    whose XLM-R tokenizer matches `paraphrase-multilingual-MiniLM-L12-v2` (the SUT
+    whose XLM-R tokenizer matches `paraphrase-multilingual-MiniLM-L12-v2` (the system under test
     retriever) — so the tokenizer-class check passes, the trigger token-ids index the
     right embedding table, and fluency is scored MULTILINGUALLY (incl. Spanish).
     Reuses all scoring logic from BertMLMFluencyScorer; only the model load differs.

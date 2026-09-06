@@ -1,6 +1,6 @@
 """Unit tests for tests/metrics.py.
 
-They require neither the SUT nor Ollama: they inject mock `retrieve_fn`/`chat_fn`
+They require neither the system under test nor Ollama: they inject mock `retrieve_fn`/`chat_fn`
 functions and validate the metric logic in isolation and fast.
 
     pytest tests/test_metrics.py -v

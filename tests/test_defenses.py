@@ -8,7 +8,7 @@
 - the retrieval role filter enforces access control.
 
 These run at the function level (no LLM / no ChromaDB), so they are deterministic and
-CI-friendly. The end-to-end red→green across a live SUT is shown by
+CI-friendly. The end-to-end red→green across a live system under test is shown by
 `scripts/compare_defenses.py`.
 """
 from pathlib import Path
