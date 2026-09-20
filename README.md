@@ -4,7 +4,7 @@
 
 Production-grade demonstration of **RAG poisoning attacks** and **defensive testing methodologies** for retrieval-augmented generation systems.
 
-> Last version of slides presenting the project and topic: [Google Slides](https://docs.google.com/presentation/d/1mtZcIQFM3ocxwbwhDOykA_kSbJWwcCeU/), made for *testear.la* testing conference.
+> Last version of slides presenting the project and topic: [Google Slides](https://docs.google.com/presentation/d/1I1TY6bRklU5GyTRxXBYFNUUCLUjcX7mM/), OWASP Uruguay event.
 
 ## What is this?
 
