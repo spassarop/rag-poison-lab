@@ -11,7 +11,7 @@ validated it on GPT-family models).
 """
 from __future__ import annotations
 
-SENTINEL = "ⓘ"  # rare character, unlikely to occur in normal text
+SENTINEL = ""  # U+E000 (Private Use Area): paper's recommended marker, guaranteed absent from input
 
 # Contiguous runs longer than this many characters get the sentinel inserted inside them,
 # so a no-space payload (a URL like http://login-update...) cannot slip through unmarked.

@@ -57,9 +57,9 @@ Acts at generation time. It marks every retrieved chunk as untrusted data so the
 - Knowledge corruption with no URL (that is the judge's job, not spotlighting's)
 - Cannot eliminate injection on its own
 
-**Implementation note (space-less payloads).** The paper (Section V-D, Adversary Considerations) warns that plain whitespace datamarking leaves a payload with no spaces completely unmarked, and recommends marking at tokenizer separations so even a space-less string is broken up.
+**Implementation note (space-less payloads).** The paper (Section V-D, Adversary Considerations) warns that plain whitespace datamarking leaves a payload with no spaces completely unmarked, and recommends marking at tokenizer separations so even a space-less string is broken up. This lab therefore interleaves the sentinel inside long space-less runs too, and uses U+E000 (a Private Use Area code point) as the marker.
 
-**Model dependence.** The paper validated spotlighting on GPT-family models, where it drove attack success below 2%. On a small local model the effect is real but partial, and the exact numbers move with the corpus and the model. Measure it on your own system rather than assuming the paper's numbers transfer.
+**Model dependence.** The paper validated spotlighting on GPT-family models, where it drove attack success below 2%. On a small local model the effect is real but partial, and the exact numbers move with the corpus and the model. The marker choice also mattered here, unlike the paper's finding of little effect on GPT: U+E000 gave a cleaner provenance signal than a visible glyph. Measure it on your own system rather than assuming the paper's numbers transfer.
 
 ### 4. Output Guard (URL Allowlist)
 
