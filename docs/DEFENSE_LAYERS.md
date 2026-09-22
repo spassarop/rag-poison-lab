@@ -46,17 +46,20 @@ Catches the non-fluent GASLITE passage that signatures miss. The scorer is plugg
 
 ### 3. Spotlighting (Prompt Datamarking)
 
-Acts at generation time. Tags retrieved chunks (e.g., `[RETRIEVED: source.md]`) to reduce instruction-following. Reduces but does not eliminate injection.
+Acts at generation time. It marks every retrieved chunk as untrusted data so the model treats it as reference material, not commands. Following the Spotlighting paper (Microsoft, arXiv:2403.14720), a rare sentinel character is interleaved through the text, the whole block is wrapped in `<<DATOS>> ... <</DATOS>>`, and the system prompt tells the model to never obey instructions found inside the marked region. It reduces indirect injection, it does not eliminate it.
 
 **What it does:**
-- Marks all retrieved context as external data
-- Instructs the model to treat it as reference, not commands
+- Interleaves a sentinel through the retrieved context and delimits the block
+- Instructs the model to treat the marked text as data, never as instructions
 
 **What it misses:**
-- Well-framed plausible injections that the model doesn't recognize as instructions
+- Well-framed plausible injections the model still treats as content
+- Knowledge corruption with no URL (that is the judge's job, not spotlighting's)
 - Cannot eliminate injection on its own
 
-**Key insight:** Spotlighting reduces GCR transversally (all techniques) but other controls are needed.
+**Implementation note (space-less payloads).** The paper (Section V-D, Adversary Considerations) warns that plain whitespace datamarking leaves a payload with no spaces completely unmarked, and recommends marking at tokenizer separations so even a space-less string is broken up.
+
+**Model dependence.** The paper validated spotlighting on GPT-family models, where it drove attack success below 2%. On a small local model the effect is real but partial, and the exact numbers move with the corpus and the model. Measure it on your own system rather than assuming the paper's numbers transfer.
 
 ### 4. Output Guard (URL Allowlist)
 
